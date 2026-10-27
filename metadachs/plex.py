@@ -3,15 +3,20 @@
 import urllib.error
 import urllib.parse
 import urllib.request
+import time
+import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
-
-from .config import path_suffix
-
 
 class Plex:
     def __init__(self, config):
         self.config = config
+        self.indexes = {}
+
+    @staticmethod
+    def path_key(value):
+        value = value.replace("\\", "/")
+        return value.casefold() if re.match(r"^[A-Za-z]:", value) else value
 
     def request(self, endpoint, method="GET", **params):
         query = urllib.parse.urlencode(params)
@@ -32,23 +37,32 @@ class Plex:
         relative = media.relative_to(library.path).as_posix()
         target = library.plex_path.replace("\\", "/").rstrip("/") + "/" + relative
         endpoint = f"/library/sections/{library.plex_section}/all"
-        keys, parent_keys = set(), set()
-        start = 0
-        while True:
-            page = ET.fromstring(self.request(endpoint, type=4 if library.kind == "tv" else 1,
-                                              **{"X-Plex-Container-Start": start, "X-Plex-Container-Size": 200}))
-            entries = list(page.findall("Video"))
-            for video in entries:
-                if any(path_suffix(part.get("file", ""), target) == "" for part in video.findall("./Media/Part")):
+        cache_key = (library.plex_section, library.kind)
+        cached = self.indexes.get(cache_key)
+        if cached is None or time.monotonic() >= cached[0]:
+            index = {}
+            start = 0
+            while True:
+                page = ET.fromstring(self.request(endpoint, type=4 if library.kind == "tv" else 1,
+                                                  **{"X-Plex-Container-Start": start, "X-Plex-Container-Size": 200}))
+                entries = list(page.findall("Video"))
+                for video in entries:
                     key = video.get("ratingKey", "")
-                    if key.isdigit():
-                        keys.add(key)
                     parent = video.get("grandparentRatingKey", "")
-                    if parent.isdigit():
-                        parent_keys.add(parent)
-            start += len(entries)
-            if not entries or start >= int(page.get("totalSize", str(start))):
-                break
+                    for part in video.findall("./Media/Part"):
+                        path = self.path_key(part.get("file", ""))
+                        keys, parent_keys = index.setdefault(path, (set(), set()))
+                        if key.isdigit():
+                            keys.add(key)
+                        if parent.isdigit():
+                            parent_keys.add(parent)
+                start += len(entries)
+                if not entries or start >= int(page.get("totalSize", str(start))):
+                    break
+            self.indexes[cache_key] = (time.monotonic() + 60, index)
+        else:
+            index = cached[1]
+        keys, parent_keys = index.get(self.path_key(target), (set(), set()))
         if not keys:
             folder = target.rsplit("/", 1)[0]
             self.request(f"/library/sections/{library.plex_section}/refresh", method="POST", path=folder)

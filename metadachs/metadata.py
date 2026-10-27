@@ -11,6 +11,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from collections import OrderedDict
 from pathlib import Path
 
 VIDEO_EXTENSIONS = {".mkv", ".mp4", ".avi", ".m4v", ".ts", ".m2ts", ".mov", ".wmv"}
@@ -67,6 +68,13 @@ def identities(names, nfo=None):
 class TMDB:
     def __init__(self, config, store):
         self.config, self.store = config, store
+        self.memory = OrderedDict()
+
+    def remember(self, key, data):
+        self.memory[key] = (time.monotonic() + min(60, self.config.cache_seconds), data)
+        self.memory.move_to_end(key)
+        if len(self.memory) > 256:
+            self.memory.popitem(last=False)
 
     def get(self, endpoint, **params):
         if not self.config.tmdb_token:
@@ -74,8 +82,15 @@ class TMDB:
         params.setdefault("language", self.config.language)
         query = urllib.parse.urlencode(sorted(params.items()))
         key = endpoint + "?" + query
+        memory = self.memory.get(key)
+        if memory is not None:
+            if time.monotonic() < memory[0]:
+                self.memory.move_to_end(key)
+                return memory[1]
+            del self.memory[key]
         cached = self.store.get_cache(key)
         if cached is not None:
+            self.remember(key, cached)
             return cached
         request = urllib.request.Request("https://api.themoviedb.org/3/" + key,
                                         headers={"Authorization": "Bearer " + self.config.tmdb_token,
@@ -88,6 +103,7 @@ class TMDB:
         except (OSError, ValueError):
             raise RuntimeError("TMDB-Verbindung oder Antwort fehlerhaft") from None
         self.store.cache(key, data, self.config.cache_seconds)
+        self.remember(key, data)
         return data
 
     def details(self, endpoint, append="credits,external_ids"):

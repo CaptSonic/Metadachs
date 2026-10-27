@@ -110,8 +110,14 @@ Backoff. Dauerhafte Zuordnungsfehler benötigen Prüfung und `retry`.
 Plex-Refresh läuft nach dem Schreiben in einer getrennten Jobphase. Neue Dateien
 lösen zunächst einen gezielten Scan aus; erst wenn der Eintrag sichtbar ist, wird
 er aktualisiert. Bei Serien wird auch die Serien-Metadatenebene aktualisiert.
-Die Eintragssuche liest paginiert die Bibliothek; für sehr große Bestände kann dies
-langsam sein. Bereits unverändert vorhandene fremde NFOs lösen keinen Refresh aus.
+Die Eintragssuche liest paginiert die Bibliothek und hält den Pfadindex für
+60 Sekunden im Arbeitsspeicher. Aufeinanderfolgende Aufträge verwenden diesen
+Index wieder, statt die gesamte Mediathek für jedes Video erneut abzurufen.
+Neue Plex-Einträge können dadurch bis zum Ablauf des Index oder nächsten
+Wiederholungsversuch warten. Die gezielten Refreshs selbst erfolgen weiterhin
+für jeden Auftrag. Bereits unverändert vorhandene fremde NFOs lösen keinen Refresh aus.
+Häufig verwendete TMDB-Antworten werden zusätzlich zum SQLite-Cache für maximal
+60 Sekunden im Arbeitsspeicher gehalten (höchstens 256 Antworten).
 
 ## Weboberfläche
 
