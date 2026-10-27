@@ -1,7 +1,6 @@
 services:
   metadachs:
-    build: .
-    image: metadachs:local
+    image: ghcr.io/captsonic/metadachs:latest
     container_name: metadachs
     restart: unless-stopped
     user: "${PUID:-99}:${PGID:-100}"

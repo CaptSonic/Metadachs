@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Container version="2">
   <Name>metadachs</Name>
-  <Repository>metadachs:local</Repository>
-  <Registry/>
+  <Repository>ghcr.io/captsonic/metadachs:latest</Repository>
+  <Registry>https://github.com/CaptSonic/Metadachs/pkgs/container/metadachs</Registry>
   <Network>bridge</Network>
   <Privileged>false</Privileged>
-  <Overview>Online-NFOs mit TMDB, Sonarr-Webhook, Polling und Plex-Refresh. Lokales Image zuerst bauen und config.toml unter /config bereitstellen. Weitere Pfade und Variablen nach Bedarf ergänzen.</Overview>
+  <Overview>Online-NFOs mit TMDB, Sonarr-Webhook, Polling, Plex-Refresh und WebUI. Fertiges Image aus GHCR. config.toml unter /config bereitstellen. Weitere Pfade und Variablen nach Bedarf ergänzen.</Overview>
   <Category>MediaApp:Other</Category>
   <WebUI>http://[IP]:[PORT:8080]/</WebUI>
   <ExtraParams>--user=99:100</ExtraParams>

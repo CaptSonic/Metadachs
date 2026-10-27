@@ -1,4 +1,7 @@
 FROM python:3.13-slim
+LABEL org.opencontainers.image.source="https://github.com/CaptSonic/Metadachs" \
+      org.opencontainers.image.title="Metadachs" \
+      org.opencontainers.image.description="NFO service with WebUI, TMDB, Sonarr and Plex support"
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY metadachs /app/metadachs

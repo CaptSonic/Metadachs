@@ -1,3 +1,3 @@
 """Metadachs: ID-basierte NFO-Erzeugung für Plex."""
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"

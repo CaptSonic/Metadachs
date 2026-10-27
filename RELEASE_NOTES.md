@@ -1,6 +1,6 @@
-# Metadachs v0.1.0
+# Metadachs v0.1.1 – Docker-Image auf GitHub
 
-Erste öffentliche Version des NFO-Dienstes für Docker auf Unraid.
+Docker-Veröffentlichung über GitHub Container Registry mit automatischen Builds.
 
 ## Funktionen
 
@@ -11,19 +11,21 @@ Erste öffentliche Version des NFO-Dienstes für Docker auf Unraid.
 - WebUI für Einstellungen, Bestandsübersicht, NFO-Feldanalyse und Auftragsstatus.
 - Vorschaumodus als Standard; Schutz vorhandener NFOs und Sicherungen beim Ersetzen.
 - Dockerfile, Compose-Beispiel und Unraid-Template.
+- Fertige Images unter `ghcr.io/captsonic/metadachs:0.1.1` und `:latest`.
+- Multi-Arch-Workflow für `linux/amd64` und `linux/arm64`; `:edge` für main.
 
 ## Installation
 
-1. `metadachs-v0.1.0.zip` herunterladen und entpacken.
-2. Im entpackten Projektverzeichnis `docker build -t metadachs:local .` ausführen.
+1. `metadachs-v0.1.1.zip` oder das Unraid-Template herunterladen.
+2. Image `ghcr.io/captsonic/metadachs:latest` verwenden; kein eigener Build nötig.
 3. Die Anleitung in `README.md` befolgen: Appdata/Mounts vorbereiten,
    `config.example.toml` als `config.toml` ablegen und eigene Tokens hinterlegen.
 4. Unraid-Template importieren oder Compose verwenden. Zunächst Vorschau aktiv lassen.
 5. WebUI über den konfigurierten Host-Port öffnen. Benutzer: `metadachs`;
    Passwort: der konfigurierte Webhook-Token.
 
-Es wird in diesem Release noch kein fertiges Container-Image in einer Registry
-bereitgestellt. Das Image muss auf dem Zielsystem gebaut werden.
+Image und Build-Status stehen beim Repository unter Packages bzw. Actions bereit.
+Ein neues GHCR-Paket muss für anonymen Download zunächst öffentlich gestellt sein.
 
 ## Validierung und Einschränkungen
 

@@ -21,15 +21,16 @@ gezielt aktualisieren. Python >= 3.13, keine zusätzlichen Python-Abhängigkeite
 
 ## Unraid einrichten
 
-1. Projekt auf den Unraid-Server kopieren. Im Projektverzeichnis bauen:
-   `docker build -t metadachs:local .`
+1. Fertiges Image verwenden: `ghcr.io/captsonic/metadachs:latest`.
+   Ein eigener Build ist nicht notwendig. Für eine feste Version statt `latest`
+   den Tag `0.1.1` verwenden.
 2. Appdata-Ordner anlegen, `config.example.toml` als `config.toml` dort ablegen.
    Ordner und Medien müssen für die Container-UID/GID beschreibbar sein.
    Das Image läuft standardmäßig als `99:100`; keine privilegierten Rechte nötig.
 3. `unraid/metadachs.xml` nach
    `/boot/config/plugins/dockerMan/templates-user/my-metadachs.xml` kopieren
-   und in Unraid unter „Add Container“ auswählen. Das Image ist lokal gebaut,
-   nicht in einer öffentlichen Registry veröffentlicht; Updates durch Neubau.
+   und in Unraid unter „Add Container“ auswählen. Das Template lädt das Image
+   aus GitHub Container Registry. Updates über Unraids Container-Aktualisierung.
 4. Hostpfade den Containerpfaden zuordnen. Alle Windows-Analysepfade entfallen.
 5. In `config.toml` Bibliotheken und Pfade eintragen. Die Datei unterstützt
    `${VARIABLE}` für beliebige Umgebungsvariablen. Diese Variablen zusätzlich
@@ -41,7 +42,7 @@ gezielt aktualisieren. Python >= 3.13, keine zusätzlichen Python-Abhängigkeite
    neu erstellen/starten. Der Moduswechsel führt zu neuer Bestandsverarbeitung.
 
 Alternativ: `.env.example` nach `.env` kopieren, Werte ausfüllen und
-`docker compose up -d --build` verwenden. Compose benötigt auf dem Host eine
+`docker compose pull` und `docker compose up -d` verwenden. Compose benötigt auf dem Host eine
 Compose-Installation; der Unraid-Template-Weg nicht. Das Compose-Beispiel hat
 zwei Serienordner; weitere Mounts/Variablen nach Bedarf ergänzen oder entfernen.
 
@@ -202,6 +203,23 @@ gespeichert. Für die wiederholte Verarbeitung `serve` starten.
   Integrationstest erfolgen. Automatisierte Tests verwenden simulierte Antworten.
 
 ## Entwicklung und Tests
+
+### Container-Veröffentlichung
+
+GitHub Actions testet den Code und veröffentlicht Multi-Arch-Images für
+`linux/amd64` (Unraid x86-64) und `linux/arm64` in GHCR:
+
+- `ghcr.io/captsonic/metadachs:latest`: zuletzt veröffentlichter Versions-Tag.
+- `ghcr.io/captsonic/metadachs:0.1.1`: feste Release-Version.
+- `ghcr.io/captsonic/metadachs:edge`: Entwicklungsstand von `main`.
+
+Ein Push eines Versions-Tags wie `v0.1.1` veröffentlicht Version und `latest`.
+Der Workflow verwendet den Repository-Token mit `packages: write`; kein eigener
+Registry-Token in den Repository-Dateien. Ein neu angelegtes GHCR-Paket kann
+zunächst privat sein: in den Package Settings die Sichtbarkeit auf Public setzen,
+damit Unraid es ohne Registry-Anmeldung herunterladen kann.
+
+Optionaler lokaler Entwickler-Build: `docker build -t metadachs:local .`.
 
 ```sh
 python -m unittest discover -s tests -v
