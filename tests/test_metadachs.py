@@ -194,6 +194,31 @@ class MetadataTests(Fixture):
 
 
 class ServiceTests(Fixture):
+    def test_scan_logs_counts_and_deduplication(self):
+        self.video()
+        service = self.service()
+        with self.assertLogs("metadachs", level="INFO") as captured:
+            service.scan(once=True)
+            service.scan(once=True)
+        output = "\n".join(captured.output)
+        self.assertIn("Ordnerprüfung gestartet", output)
+        self.assertIn("1 Videos, 1 neue/geänderte Aufträge", output)
+        self.assertIn("1 Videos, 0 neue/geänderte Aufträge", output)
+        self.assertIn("nächste Prüfung in 60 s", output)
+
+    def test_preview_job_logs_progress_without_tokens(self):
+        self.video()
+        service = self.service(tmdb_token="secret-not-to-log")
+        service.tmdb.resolve = Mock(return_value=123)
+        service.tmdb.details = Mock(return_value={"id": 123, "title": "Film"})
+        service.scan(once=True)
+        with self.assertLogs("metadachs", level="INFO") as captured:
+            service.process_one()
+        output = "\n".join(captured.output)
+        for expected in ("Auftrag gestartet", "Online-Metadaten ermitteln", "Vorschau", "Auftrag abgeschlossen ohne Plex-Refresh"):
+            self.assertIn(expected, output)
+        self.assertNotIn("secret-not-to-log", output)
+
     def test_scan_excludes_extras_and_deduplicates(self):
         self.video()
         self.video("Film (2024) {tmdb-123}/extras/trailer.mkv")

@@ -2,6 +2,7 @@
 
 import dataclasses
 import json
+import logging
 import os
 import tempfile
 import threading
@@ -33,6 +34,7 @@ EDITABLE = ("language", "fallback_language", "dry_run", "replace_existing", "pol
             "stable_seconds", "retry_seconds", "cache_seconds", "plex_url")
 SECRETS = ("tmdb_token", "plex_token", "webhook_token")
 LIB_FIELDS = tuple(field.name for field in dataclasses.fields(Library))
+LOG = logging.getLogger("metadachs")
 
 
 def inspect_nfo(path, root):
@@ -80,6 +82,8 @@ class Web:
 
     def _build(self):
         items, errors = {}, []
+        started = time.monotonic()
+        LOG.info("WebUI-Bestandsabgleich gestartet (nur lesend)")
         try:
             for lib in self.service.config.libraries:
                 if not lib.path.is_dir():
@@ -110,6 +114,8 @@ class Web:
             with self.lock:
                 self.items = sorted(items.values(), key=lambda item: (item["library"], item["title"].casefold()))
                 self.errors, self.updated = errors, time.time()
+            LOG.info("WebUI-Bestandsabgleich beendet: %d Filme/Serien, %d Videos, %d Fehler (%.1f s)",
+                     len(items), sum(len(item["files"]) for item in items.values()), len(errors), time.monotonic() - started)
         finally:
             with self.lock:
                 self.scanning = False
@@ -193,6 +199,7 @@ class Web:
                     handle.write(original)
                 os.replace(name, self.config_path)
                 self.restart_required = True
+                LOG.info("WebUI-Einstellungen gespeichert und gesichert; Container-Neustart erforderlich")
             finally:
                 if os.path.exists(name):
                     os.unlink(name)

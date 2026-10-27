@@ -1,6 +1,6 @@
-# Metadachs v0.1.1 – Docker-Image auf GitHub
+# Metadachs v0.1.2 – Sichtbare Konsolenaktivität
 
-Docker-Veröffentlichung über GitHub Container Registry mit automatischen Builds.
+Erweiterte Statusmeldungen auf stdout, direkt im Unraid-Container-Log sichtbar.
 
 ## Funktionen
 
@@ -11,12 +11,17 @@ Docker-Veröffentlichung über GitHub Container Registry mit automatischen Build
 - WebUI für Einstellungen, Bestandsübersicht, NFO-Feldanalyse und Auftragsstatus.
 - Vorschaumodus als Standard; Schutz vorhandener NFOs und Sicherungen beim Ersetzen.
 - Dockerfile, Compose-Beispiel und Unraid-Template.
-- Fertige Images unter `ghcr.io/captsonic/metadachs:0.1.1` und `:latest`.
+- Fertige Images unter `ghcr.io/captsonic/metadachs:0.1.2` und `:latest`.
 - Multi-Arch-Workflow für `linux/amd64` und `linux/arm64`; `:edge` für main.
+- Startmeldung mit Betriebsmodus, WebUI-Port und Prüfintervall.
+- Jeder Prüfzyklus mit Anzahl Videos, neuen/geänderten Aufträgen, wartenden Dateien und Fehlern.
+- Zwischenstände alle 500 Videos; WebUI-Bestandsabgleich mit Zusammenfassung.
+- Fortschritt für Metadaten, NFO-Schreiben/Vorschau, Plex-Refresh und Wiederholungsfristen.
+- Ohne zusätzliche Konfiguration: `docker logs -f metadachs` oder Unraid „Logs“.
 
 ## Installation
 
-1. `metadachs-v0.1.1.zip` oder das Unraid-Template herunterladen.
+1. `metadachs-v0.1.2.zip` oder das Unraid-Template herunterladen.
 2. Image `ghcr.io/captsonic/metadachs:latest` verwenden; kein eigener Build nötig.
 3. Die Anleitung in `README.md` befolgen: Appdata/Mounts vorbereiten,
    `config.example.toml` als `config.toml` ablegen und eigene Tokens hinterlegen.
@@ -29,7 +34,7 @@ Ein neues GHCR-Paket muss für anonymen Download zunächst öffentlich gestellt 
 
 ## Validierung und Einschränkungen
 
-- 37 automatisierte Tests erfolgreich unter Windows und im Linux-Docker-Container.
+- 39 automatisierte Tests einschließlich Log-Ausgaben und Schutz vor Token-Ausgabe.
 - Docker-Build sowie HTTP-Integrationstests erfolgreich.
 - Noch kein echter Integrationstest mit den persönlichen TMDB-/Plex-Zugängen
   und noch kein Test auf einem Unraid-Zielsystem; zunächst kleinen Testbestand nutzen.

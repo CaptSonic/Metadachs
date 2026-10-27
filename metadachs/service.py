@@ -54,9 +54,14 @@ class Service:
 
     def scan(self, once=False):
         with self.scan_lock:
+            started = time.monotonic()
+            queued = waiting = 0
+            LOG.info("Ordnerprüfung gestartet: %d Mediatheken", len(self.config.libraries))
             errors = []
             current_paths = set()
             for lib in self.config.libraries:
+                found = 0
+                LOG.info("Prüfe Mediathek %s: %s", lib.name, lib.path)
                 if not lib.path.is_dir():
                     errors.append(f"Mount nicht verfügbar: {lib.name}")
                     continue
@@ -72,6 +77,9 @@ class Service:
                             if not self.eligible(path, lib):
                                 continue
                             current_paths.add(str(path))
+                            found += 1
+                            if found % 500 == 0:
+                                LOG.info("Ordnerprüfung %s: bisher %d Videodateien", lib.name, found)
                             signature = self.signature(path)
                             now = time.time()
                             previous = self.observed.get(str(path))
@@ -79,19 +87,26 @@ class Service:
                                 self.observed[str(path)] = (signature, now)
                             stable_since = self.observed[str(path)][1]
                             if now - path.stat().st_mtime < self.config.stable_seconds:
+                                waiting += 1
                                 continue
                             if once or now - stable_since >= self.config.stable_seconds:
-                                self.store.enqueue(lib.name, str(path), signature)
+                                queued += self.store.enqueue(lib.name, str(path), signature)
+                            else:
+                                waiting += 1
                         except (OSError, ValueError) as exc:
                             errors.append(f"Datei nicht prüfbar: {path}: {type(exc).__name__}")
+                LOG.info("Mediathek %s geprüft: %d Videodateien", lib.name, found)
             self.observed = {key: value for key, value in self.observed.items() if key in current_paths}
             self.last_scan, self.scan_errors = time.time(), errors
             for error in errors:
                 LOG.warning("%s", error)
+            LOG.info("Ordnerprüfung beendet: %d Videos, %d neue/geänderte Aufträge, %d warten auf Dateiruhe, %d Fehler (%.1f s); nächste Prüfung in %d s",
+                     len(current_paths), queued, waiting, len(errors), time.monotonic() - started, self.config.poll_seconds)
 
     def webhook(self, payload):
         event = payload.get("eventType")
         if event == "Test":
+            LOG.info("Sonarr-Testwebhook empfangen und bestätigt")
             return {"accepted": True, "test": True}
         if event not in ("Download", "ImportComplete", "Rename", "SeriesAdd"):
             return {"accepted": False, "reason": "Ereignis nicht relevant"}
@@ -114,14 +129,15 @@ class Service:
         lib, target = matches[0]
         if not target.is_dir():
             raise ValueError("Serienordner ist noch nicht verfügbar; Polling übernimmt später")
-        count = 0
+        count = queued = 0
         for folder, dirs, files in os.walk(target, followlinks=False):
             dirs[:] = [name for name in dirs if name.lower() not in EXTRAS and not Path(folder, name).is_symlink()]
             for name in files:
                 path = Path(folder, name)
                 if self.eligible(path, lib):
-                    self.store.enqueue(lib.name, str(path), self.signature(path), self.config.stable_seconds)
+                    queued += self.store.enqueue(lib.name, str(path), self.signature(path), self.config.stable_seconds)
                     count += 1
+        LOG.info("Sonarr %s: %s, %d Videos geprüft, %d Aufträge aufgenommen", event, lib.name, count, queued)
         return {"accepted": True, "files": count}
 
     def generate(self, lib, path):
@@ -130,6 +146,7 @@ class Service:
             raise IdentityError("Ein eigener Film-/Serienordner ist erforderlich")
         home = lib.path / relative.parts[0]
         actions = []
+        LOG.info("Online-Metadaten ermitteln: %s", path)
         if lib.kind == "movie":
             videos = [item for item in home.iterdir() if self.eligible(item, lib)]
             if len(videos) != 1 or path.parent != home:
@@ -165,7 +182,9 @@ class Service:
             if not contained(output, lib.path):
                 raise IdentityError("Ausgabepfad außerhalb der Mediathek")
             result = write_nfo(output, content, self.config, self.store)
-            LOG.info("%s: %s", result, output)
+            description = {"written": "geschrieben", "would-write": "würde geschrieben (Vorschau)",
+                           "preserved": "vorhandene fremde NFO bleibt erhalten", "unchanged": "unverändert"}[result]
+            LOG.info("NFO %s: %s", description, output)
             changed |= result == "written"
         return changed
 
@@ -173,6 +192,7 @@ class Service:
         job = self.store.claim()
         if job is None:
             return False
+        LOG.info("Auftrag gestartet: %s | Phase %s | %s", job["library"], job["phase"], job["path"])
         try:
             path = Path(job["path"])
             lib = self.library(path)
@@ -180,9 +200,11 @@ class Service:
                 raise IdentityError("Datei nicht mehr gültig")
             if self.signature(path) != job["signature"]:
                 self.store.update(job, status="superseded")
+                LOG.info("Auftrag überholt: Datei wurde erneut geändert: %s", path)
                 return True
             if time.time() - path.stat().st_mtime < self.config.stable_seconds:
                 self.store.update(job, status="pending", due=time.time() + self.config.stable_seconds)
+                LOG.info("Datei noch nicht ruhig; erneute Prüfung in %d s: %s", self.config.stable_seconds, path)
                 return True
             if job["phase"] == "metadata":
                 changed = self.generate(lib, path)
@@ -192,10 +214,14 @@ class Service:
                 managed = nfo.exists() and self.store.digest(nfo) == sha(nfo.read_bytes())
                 if self.config.dry_run or not lib.plex_section or not (changed or managed):
                     self.store.update(job, status="done")
+                    reason = "Vorschaumodus" if self.config.dry_run else "kein Plex-Ziel" if not lib.plex_section else "keine verwaltete/geänderte NFO"
+                    LOG.info("Auftrag abgeschlossen ohne Plex-Refresh (%s): %s", reason, path)
                     return True
                 self.store.update(job, phase="plex")
+            LOG.info("Plex-Refresh gestartet: Mediathek %s | %s", lib.name, path)
             self.plex.refresh(lib, path)
             self.store.update(job, status="done", error="")
+            LOG.info("Auftrag und Plex-Refresh abgeschlossen: %s", path)
         except IdentityError as exc:
             self.store.update(job, status="failed", error=str(exc))
             LOG.warning("Zuordnung fehlgeschlagen: %s: %s", job["path"], exc)
@@ -203,9 +229,11 @@ class Service:
             attempts = job["attempts"] + 1
             # Never persist request objects, URLs containing credentials or tokens.
             error = str(exc) if isinstance(exc, RuntimeError) else type(exc).__name__
+            delay = min(3600, self.config.retry_seconds * 2 ** min(attempts - 1, 6))
             self.store.update(job, status="failed" if attempts >= 10 else "pending", attempts=attempts,
-                              due=time.time() + min(3600, self.config.retry_seconds * 2 ** min(attempts - 1, 6)), error=error)
-            LOG.warning("Auftrag fehlgeschlagen: %s: %s", job["path"], error)
+                              due=time.time() + delay, error=error)
+            LOG.warning("Auftrag fehlgeschlagen (Versuch %d/10, %s): %s: %s", attempts,
+                        "keine weiteren Versuche" if attempts >= 10 else f"erneut in {delay} s", job["path"], error)
         return True
 
     def worker(self):
@@ -337,6 +365,12 @@ class Service:
                 LOG.debug("HTTP-Anfrage verarbeitet")
 
         server = ThreadingHTTPServer(("0.0.0.0", self.config.port), Handler)
+        LOG.info("Metadachs gestartet | Modus: %s | %d Mediatheken | Prüfintervall: %d s | Dateiruhe: %d s",
+                 "VORSCHAU (keine NFO-Schreibzugriffe/Plex-Refreshs)" if self.config.dry_run else "SCHREIBMODUS",
+                 len(self.config.libraries), self.config.poll_seconds, self.config.stable_seconds)
+        LOG.info("WebUI und Sonarr-Webhook lauschen auf Port %d; Bestandsprüfung und Auftragsverarbeitung werden gestartet", self.config.port)
+        if not self.config.tmdb_token:
+            LOG.warning("TMDB-Token fehlt; Online-Metadaten können noch nicht abgerufen werden")
         server.daemon_threads = True
         threads = [threading.Thread(target=fn, daemon=True) for fn in (self.worker, self.scanner)]
         for thread in threads:
@@ -344,6 +378,7 @@ class Service:
         try:
             server.serve_forever(poll_interval=0.5)
         finally:
+            LOG.info("Metadachs wird beendet; laufende Arbeiten werden abgewartet")
             self.stop.set()
             server.server_close()
             for thread in threads:
@@ -351,3 +386,4 @@ class Service:
             if self.web.thread:
                 self.web.thread.join()
             self.store.close()
+            LOG.info("Metadachs beendet")

@@ -28,10 +28,11 @@ class Store:
 
     def enqueue(self, library: str, path: str, signature: str, delay: int = 0):
         with self.lock, self.db:
-            self.db.execute("""INSERT INTO jobs(library,path,signature,due) VALUES(?,?,?,?)
+            cursor = self.db.execute("""INSERT INTO jobs(library,path,signature,due) VALUES(?,?,?,?)
                 ON CONFLICT(library,path) DO UPDATE SET signature=excluded.signature,
                 phase='metadata',status='pending',attempts=0,due=excluded.due,error=''
                 WHERE jobs.signature != excluded.signature""", (library, path, signature, time.time() + delay))
+            return cursor.rowcount > 0
 
     def claim(self):
         with self.lock, self.db:

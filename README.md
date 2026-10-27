@@ -23,7 +23,7 @@ gezielt aktualisieren. Python >= 3.13, keine zusätzlichen Python-Abhängigkeite
 
 1. Fertiges Image verwenden: `ghcr.io/captsonic/metadachs:latest`.
    Ein eigener Build ist nicht notwendig. Für eine feste Version statt `latest`
-   den Tag `0.1.1` verwenden.
+   den Tag `0.1.2` verwenden.
 2. Appdata-Ordner anlegen, `config.example.toml` als `config.toml` dort ablegen.
    Ordner und Medien müssen für die Container-UID/GID beschreibbar sein.
    Das Image läuft standardmäßig als `99:100`; keine privilegierten Rechte nötig.
@@ -158,6 +158,23 @@ weiterhin erforderlich; es gibt noch keinen Ersteinrichtungsassistenten.
 
 ## Befehle und Diagnose
 
+### Konsolen-Log
+
+Statusmeldungen werden automatisch mit Zeitstempel und Schweregrad auf stdout
+ausgegeben; es ist keine zusätzliche Aktivierung nötig. In Unraid beim Container
+„Logs“ öffnen oder `docker logs -f metadachs` ausführen. Mit Compose:
+`docker compose logs -f metadachs`.
+
+Das Log zeigt Start und Betriebsmodus, Beginn/Ende jeder Ordnerprüfung,
+Videodateizahlen je Mediathek, neue/geänderte Aufträge, wartende Dateien und Fehler.
+Auch ohne neue Medien wird jeder Prüfzyklus bestätigt. Bei großen Beständen
+erscheint zusätzlich alle 500 Videos ein Zwischenstand. Aufträge melden den
+Metadatenabruf, NFO-Ergebnisse, Plex-Refresh und Wiederholungen mit Wartezeit.
+Der lesende WebUI-Bestandsabgleich sowie gespeicherte Einstellungen werden ebenfalls
+bestätigt. Wiederholte Healthcheck-/Browser-Abfragen werden nicht einzeln geloggt.
+Tokens und vollständige Webhook-Payloads werden nicht ausgegeben; Medienpfade
+und Dateinamen sind jedoch sichtbar. Logs vor öffentlichem Teilen prüfen.
+
 Im Container (Standardkonfiguration `/config/config.toml`):
 
 ```sh
@@ -210,7 +227,7 @@ GitHub Actions testet den Code und veröffentlicht Multi-Arch-Images für
 `linux/amd64` (Unraid x86-64) und `linux/arm64` in GHCR:
 
 - `ghcr.io/captsonic/metadachs:latest`: zuletzt veröffentlichter Versions-Tag.
-- `ghcr.io/captsonic/metadachs:0.1.1`: feste Release-Version.
+- `ghcr.io/captsonic/metadachs:0.1.2`: feste Release-Version.
 - `ghcr.io/captsonic/metadachs:edge`: Entwicklungsstand von `main`.
 
 Ein Push eines Versions-Tags wie `v0.1.1` veröffentlicht Version und `latest`.

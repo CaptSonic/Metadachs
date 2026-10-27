@@ -4,6 +4,7 @@ import argparse
 import json
 import logging
 import signal
+import sys
 from pathlib import Path
 
 from .config import load
@@ -15,7 +16,7 @@ def main():
     parser.add_argument("--config", type=Path, default=Path("/config/config.toml"))
     parser.add_argument("command", choices=("serve", "scan", "check", "jobs", "retry"))
     args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", stream=sys.stdout)
     try:
         config = load(args.config)
         if args.command == "check":
