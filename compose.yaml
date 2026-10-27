@@ -1,0 +1,31 @@
+services:
+  metadachs:
+    build: .
+    image: metadachs:local
+    container_name: metadachs
+    restart: unless-stopped
+    user: "${PUID:-99}:${PGID:-100}"
+    ports:
+      - "${METADACHS_PORT:-8080}:8080"
+    volumes:
+      - "${APPDATA_HOST:?Set APPDATA_HOST}:/config"
+      - "${SERIES_HOST:?Set SERIES_HOST}:/media/series"
+      - "${SERIES_OTHER_HOST:?Set SERIES_OTHER_HOST}:/media/series-other"
+      - "${MOVIES_HOST:?Set MOVIES_HOST}:/media/movies"
+    environment:
+      METADACHS_TMDB_TOKEN: "${METADACHS_TMDB_TOKEN:?Set TMDB token}"
+      METADACHS_PLEX_URL: "${METADACHS_PLEX_URL:-}"
+      METADACHS_PLEX_TOKEN: "${METADACHS_PLEX_TOKEN:-}"
+      METADACHS_WEBHOOK_TOKEN: "${METADACHS_WEBHOOK_TOKEN:?Set webhook token}"
+      METADACHS_DRY_RUN: "${METADACHS_DRY_RUN:-true}"
+      SERIES_PATH: /media/series
+      SERIES_OTHER_PATH: /media/series-other
+      MOVIES_PATH: /media/movies
+      SONARR_SERIES_PATH: "${SONARR_SERIES_PATH:?Set Sonarr path}"
+      SONARR_SERIES_OTHER_PATH: "${SONARR_SERIES_OTHER_PATH:?Set Sonarr path}"
+      PLEX_SERIES_PATH: "${PLEX_SERIES_PATH:?Set Plex path}"
+      PLEX_SERIES_OTHER_PATH: "${PLEX_SERIES_OTHER_PATH:?Set Plex path}"
+      PLEX_MOVIES_PATH: "${PLEX_MOVIES_PATH:?Set Plex path}"
+      PLEX_SERIES_SECTION: "${PLEX_SERIES_SECTION:-}"
+      PLEX_SERIES_OTHER_SECTION: "${PLEX_SERIES_OTHER_SECTION:-}"
+      PLEX_MOVIES_SECTION: "${PLEX_MOVIES_SECTION:-}"

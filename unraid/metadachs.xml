@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Container version="2">
+  <Name>metadachs</Name>
+  <Repository>metadachs:local</Repository>
+  <Registry/>
+  <Network>bridge</Network>
+  <Privileged>false</Privileged>
+  <Overview>Online-NFOs mit TMDB, Sonarr-Webhook, Polling und Plex-Refresh. Lokales Image zuerst bauen und config.toml unter /config bereitstellen. Weitere Pfade und Variablen nach Bedarf ergänzen.</Overview>
+  <Category>MediaApp:Other</Category>
+  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
+  <ExtraParams>--user=99:100</ExtraParams>
+  <PostArgs/>
+  <Config Name="Appdata" Target="/config" Default="/mnt/user/appdata/metadachs" Mode="rw" Description="config.toml und persistenter Zustand; für UID 99/GID 100 beschreibbar" Type="Path" Display="always" Required="true" Mask="false"/>
+  <Config Name="Serien" Target="/media/series" Default="" Mode="rw" Description="Unraid-Serienordner" Type="Path" Display="always" Required="true" Mask="false"/>
+  <Config Name="Weitere Serien" Target="/media/series-other" Default="" Mode="rw" Description="Zweiter Serienordner" Type="Path" Display="always" Required="false" Mask="false"/>
+  <Config Name="Filme" Target="/media/movies" Default="" Mode="rw" Description="Unraid-Filmordner" Type="Path" Display="always" Required="true" Mask="false"/>
+  <Config Name="HTTP" Target="8080" Default="8080" Mode="tcp" Description="Nur intern bereitstellen" Type="Port" Display="always" Required="true" Mask="false"/>
+  <Config Name="TMDB Token" Target="METADACHS_TMDB_TOKEN" Default="" Mode="" Description="TMDB API Read Access Token" Type="Variable" Display="always" Required="true" Mask="true"/>
+  <Config Name="Plex URL" Target="METADACHS_PLEX_URL" Default="" Mode="" Description="Plex-Server im LAN" Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="Plex Token" Target="METADACHS_PLEX_TOKEN" Default="" Mode="" Description="Plex-Token" Type="Variable" Display="always" Required="false" Mask="true"/>
+  <Config Name="Webhook Token" Target="METADACHS_WEBHOOK_TOKEN" Default="" Mode="" Description="Zufälliges Geheimnis, mindestens 16 Zeichen" Type="Variable" Display="always" Required="true" Mask="true"/>
+  <Config Name="Vorschau" Target="METADACHS_DRY_RUN" Default="true" Mode="" Description="true: keine NFOs schreiben und kein Plex-Refresh" Type="Variable" Display="always" Required="true" Mask="false"/>
+</Container>

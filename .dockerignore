@@ -1,0 +1,6 @@
+*
+!metadachs/
+!metadachs/*.py
+!metadachs/static/
+!metadachs/static/*
+metadachs/__pycache__/

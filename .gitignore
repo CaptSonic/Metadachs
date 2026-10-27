@@ -1,0 +1,9 @@
+.env
+config.toml
+__pycache__/
+*.pyc
+.venv/
+state/
+*.sqlite3*
+*.bak
+dist/
