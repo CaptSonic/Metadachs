@@ -2,6 +2,7 @@
 const $ = selector => document.querySelector(selector);
 const labels = {language:'Sprache',fallback_language:'Ersatzsprache',dry_run:'Vorschaumodus',replace_existing:'Fremde NFOs ersetzen (mit Sicherung)',poll_seconds:'Prüfintervall (Sekunden)',stable_seconds:'Dateiruhezeit (Sekunden)',retry_seconds:'Wiederholung (Sekunden)',cache_seconds:'API-Cache (Sekunden)',plex_url:'Plex-Serveradresse',tmdb_token:'TMDB Read Access Token',plex_token:'Plex-Token',webhook_token:'WebUI-/Webhook-Token',name:'Name',kind:'Typ',path:'Container-Medienpfad',sonarr_path:'Sonarr-Pfadpräfix',plex_path:'Plex-Pfadpräfix',plex_section:'Plex-Bibliotheks-ID',season_numbering:'TMDB-Staffel-/Folgenreihenfolge erlauben'};
 const stateLabels = {pending:'Wartend',running:'In Bearbeitung',done:'Abgeschlossen',failed:'Fehlgeschlagen',superseded:'Durch Änderung ersetzt'};
+labels.polling_enabled = 'Automatische Ordnerprüfung';
 let offset = 0, total = 0, configLoaded = false, activeTab = 'inventory';
 function element(tag, text, cls) { const node = document.createElement(tag); if(text !== undefined) node.textContent = text; if(cls) node.className = cls; return node; }
 function notice(text) { $('#notice').textContent = text; }

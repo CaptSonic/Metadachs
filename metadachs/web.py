@@ -30,7 +30,7 @@ GROUPS = {
     "Trailer": ("trailer",),
     "Wiedergabestatus": ("watched", "playcount", "lastplayed"),
 }
-EDITABLE = ("language", "fallback_language", "dry_run", "replace_existing", "poll_seconds",
+EDITABLE = ("language", "fallback_language", "dry_run", "replace_existing", "polling_enabled", "poll_seconds",
             "stable_seconds", "retry_seconds", "cache_seconds", "plex_url")
 SECRETS = ("tmdb_token", "plex_token", "webhook_token")
 LIB_FIELDS = tuple(field.name for field in dataclasses.fields(Library))

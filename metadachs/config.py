@@ -32,6 +32,7 @@ class Config:
     dry_run: bool = True
     replace_existing: bool = False
     poll_seconds: int = 60
+    polling_enabled: bool = True
     stable_seconds: int = 30
     port: int = 8080
     cache_seconds: int = 86400
@@ -79,7 +80,7 @@ def load(path: Path) -> Config:
         env = "METADACHS_" + key.upper()
         if env in os.environ:
             settings[key] = os.environ[env]
-    for key in ("dry_run", "replace_existing"):
+    for key in ("dry_run", "replace_existing", "polling_enabled"):
         env = "METADACHS_" + key.upper()
         if env in os.environ:
             if os.environ[env].lower() not in ("true", "false"):
@@ -107,7 +108,7 @@ def load(path: Path) -> Config:
     config = Config(libraries=tuple(libs), **settings)
     if not config.state.is_absolute() or any(contained(config.state, lib.path) for lib in libs):
         raise ValueError("state muss absolut und außerhalb der Medienpfade liegen")
-    for key in ("dry_run", "replace_existing"):
+    for key in ("dry_run", "replace_existing", "polling_enabled"):
         if type(getattr(config, key)) is not bool:
             raise ValueError(f"{key} muss ein Boolean sein")
     for lib in libs:

@@ -224,7 +224,7 @@ class Service:
             LOG.info("Auftrag und Plex-Refresh abgeschlossen: %s", path)
         except IdentityError as exc:
             self.store.update(job, status="failed", error=str(exc))
-            LOG.warning("Zuordnung fehlgeschlagen: %s: %s", job["path"], exc)
+            LOG.warning("Zuordnung fehlgeschlagen (keine automatische Wiederholung; nach Korrektur erneut anstoßen): %s: %s", job["path"], exc)
         except Exception as exc:
             attempts = job["attempts"] + 1
             # Never persist request objects, URLs containing credentials or tokens.
@@ -242,6 +242,9 @@ class Service:
                 self.stop.wait(1)
 
     def scanner(self):
+        if not self.config.polling_enabled:
+            LOG.info("Automatische Ordnerprüfung deaktiviert; Sonarr-Webhooks, wartende Aufträge und manuelle Bestandsprüfung bleiben aktiv")
+            return
         while not self.stop.is_set():
             try:
                 self.scan()
@@ -319,6 +322,7 @@ class Service:
                         self.reply(400, {"error": "Ungültige Seitenauswahl"})
                 elif route == "/api/status":
                     self.reply(200, {"dry_run": service.config.dry_run, "last_scan": service.last_scan,
+                                     "polling_enabled": service.config.polling_enabled,
                                      "scan_errors": service.scan_errors, "restart_required": service.web.restart_required})
                 else:
                     self.reply(404, {"error": "Nicht verfügbar"})
@@ -368,7 +372,8 @@ class Service:
         LOG.info("Metadachs gestartet | Modus: %s | %d Mediatheken | Prüfintervall: %d s | Dateiruhe: %d s",
                  "VORSCHAU (keine NFO-Schreibzugriffe/Plex-Refreshs)" if self.config.dry_run else "SCHREIBMODUS",
                  len(self.config.libraries), self.config.poll_seconds, self.config.stable_seconds)
-        LOG.info("WebUI und Sonarr-Webhook lauschen auf Port %d; Bestandsprüfung und Auftragsverarbeitung werden gestartet", self.config.port)
+        LOG.info("WebUI und Sonarr-Webhook lauschen auf Port %d; Auftragsverarbeitung aktiv; automatische Ordnerprüfung: %s",
+                 self.config.port, "aktiv" if self.config.polling_enabled else "deaktiviert")
         if not self.config.tmdb_token:
             LOG.warning("TMDB-Token fehlt; Online-Metadaten können noch nicht abgerufen werden")
         server.daemon_threads = True

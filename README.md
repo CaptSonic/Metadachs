@@ -92,6 +92,22 @@ vermeiden. Für Filme genügt das Polling; ein Radarr-Webhook ist noch nicht vor
 
 ## Überwachung und Aufträge
 
+Die regelmäßige Suche lässt sich unter WebUI → Einstellungen → Allgemein →
+**Automatische Ordnerprüfung** ausschalten. Speichern und Container neu starten.
+Alternativ unter `[settings]` in `config.toml`: `polling_enabled = false`,
+oder als Container-Variable `METADACHS_POLLING_ENABLED=false` setzen.
+Ohne Angabe bleibt die Prüfung wie bisher aktiviert. Eine gesetzte
+Umgebungsvariable hat Vorrang vor der WebUI/TOML-Einstellung.
+
+Bei deaktivierter Prüfung erfolgen **keine automatische Startprüfung und keine
+regelmäßigen Medien-/WebUI-Bestandsabgleiche**. Sonarr-Webhooks und bereits
+gespeicherte Aufträge einschließlich Wiederholungsversuchen werden weiterhin
+verarbeitet. Neue Filme ohne Webhook werden nicht automatisch entdeckt.
+„Bestand neu prüfen“ in der WebUI bleibt verfügbar, liest aber nur die Übersicht
+ein und erzeugt keine NFO-Aufträge. Der explizite CLI-Befehl `scan` funktioniert
+weiterhin unabhängig vom Automatikschalter. Die WebUI-Aktualisierung des
+angezeigten Status alle 15 Sekunden durchsucht keine Medienordner.
+
 Polling erfasst neue/geänderte Videodateien alle `poll_seconds` (Standard 60).
 Eine unveränderte Größe/mtime muss über `stable_seconds` beobachtet werden.
 Das ist kein garantierter Kopierabschluss; bei langsamen Kopien höher einstellen.
@@ -180,6 +196,15 @@ Der lesende WebUI-Bestandsabgleich sowie gespeicherte Einstellungen werden ebenf
 bestätigt. Wiederholte Healthcheck-/Browser-Abfragen werden nicht einzeln geloggt.
 Tokens und vollständige Webhook-Payloads werden nicht ausgegeben; Medienpfade
 und Dateinamen sind jedoch sichtbar. Logs vor öffentlichem Teilen prüfen.
+
+TMDB-404-Fehler enthalten den API-Pfad ohne Zugangsdaten. Beispielsweise bedeutet
+`/tv/123/season/2/episode/9`, dass der konkrete Episodenabruf fehlgeschlagen ist;
+`/tv/123` betrifft die Serien-ID. Solche Aufträge werden ohne automatische
+Wiederholung als fehlgeschlagen markiert. Erst Zuordnung/NFO-IDs bzw. die bewusst
+aktivierte Staffelnummerierung prüfen, dann über die WebUI erneut anstoßen.
+TVDB- und TMDB-Staffelreihenfolgen dürfen nicht ungeprüft gleichgesetzt werden.
+Es erfolgt keine automatische Titel-Zuordnung oder Umnummerierung bei 404.
+Netzwerkfehler und TMDB-Serverfehler behalten ihre Wiederholungsversuche.
 
 Im Container (Standardkonfiguration `/config/config.toml`):
 

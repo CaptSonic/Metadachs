@@ -7,6 +7,8 @@ replace_existing = false
 language = "de-DE"
 fallback_language = "en-US"
 poll_seconds = 60
+# false: Sonarr/webhooks and manual inventory only; no automatic startup scan.
+polling_enabled = true
 stable_seconds = 30
 retry_seconds = 60
 cache_seconds = 86400

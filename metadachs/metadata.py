@@ -22,6 +22,18 @@ class IdentityError(ValueError):
     pass
 
 
+class TMDBNotFound(IdentityError):
+    """Missing resource needs a mapping review, not automatic retries."""
+
+    def __init__(self, endpoint):
+        message = f"TMDB HTTP 404 bei /{endpoint}: Ressource nicht gefunden."
+        if re.fullmatch(r"tv/\d+/season/\d+/episode/\d+", endpoint):
+            message += " Staffel-/Episodenreihenfolge und externe Episoden-IDs prüfen; keine automatische Umnummerierung."
+        else:
+            message += " Serien-/Film-ID oder externe ID-Zuordnung prüfen."
+        super().__init__(message)
+
+
 def read_nfo(path: Path):
     if not path.exists():
         return None
@@ -99,7 +111,11 @@ class TMDB:
             with urllib.request.urlopen(request, timeout=30) as response:
                 data = json.load(response)
         except urllib.error.HTTPError as exc:
-            raise RuntimeError(f"TMDB HTTP {exc.code}") from None
+            status = exc.code
+            exc.close()
+            if status == 404:
+                raise TMDBNotFound(endpoint) from None
+            raise RuntimeError(f"TMDB HTTP {status} bei /{endpoint}") from None
         except (OSError, ValueError):
             raise RuntimeError("TMDB-Verbindung oder Antwort fehlerhaft") from None
         self.store.cache(key, data, self.config.cache_seconds)
