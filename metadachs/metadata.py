@@ -50,7 +50,45 @@ def read_nfo(path: Path):
     try:
         return ET.fromstring(text)
     except ET.ParseError as exc:
-        raise IdentityError(f"Ungültige NFO: {path}") from exc
+        # Plex multi-episode NFO: sibling episodedetails, one XML declaration.
+        fragment = re.sub(r"^\s*<\?xml[^?]*\?>", "", text, count=1)
+        try:
+            root = ET.fromstring("<episodes>" + fragment + "</episodes>")
+            if len(root) < 2 or any(child.tag != "episodedetails" for child in root):
+                raise ET.ParseError("Keine Mehrfachepisoden-NFO")
+            return root
+        except ET.ParseError:
+            raise IdentityError(f"Ungültige NFO: {path}") from exc
+
+
+def episode_numbers(stem):
+    """Explicit local numbering only; bounded, ascending same-season episodes."""
+    match = re.search(r"(?i)S(\d{1,3})E(\d{1,4})(?!\d)", stem)
+    if not match:
+        raise IdentityError("Nicht unterstützte Episodenbenennung")
+    season, first = map(int, match.groups())
+    tail = stem[match.end():].split(" - ")[0]
+    numbers = [first]
+    while True:
+        extra = re.match(r"(?i)(-?E)(\d{1,4})(?!\d)", tail)
+        if not extra:
+            break
+        number = int(extra[2])
+        if number <= numbers[-1] or number - first >= 100:
+            raise IdentityError("Ungültiger oder zu großer Episodenbereich")
+        numbers.extend(range(numbers[-1] + 1, number + 1) if extra[1].startswith("-") else [number])
+        tail = tail[extra.end():]
+    if re.match(r"(?i)(?:E\d|[- ]+\d|[- ]+E\d|[- ]+S\d+E\d)", tail):
+        raise IdentityError("Nicht unterstützte oder staffelübergreifende Episodenbenennung")
+    return season, numbers
+
+
+def episode_nfos(content):
+    """Serialize already validated individual XML records in Plex NFO format."""
+    if len(content) == 1:
+        return content[0]
+    return b'<?xml version="1.0" encoding="utf-8"?>\n' + b"\n".join(
+        ET.tostring(ET.fromstring(item), encoding="utf-8") for item in content) + b"\n"
 
 
 def identities(names, nfo=None):

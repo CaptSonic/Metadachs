@@ -44,6 +44,12 @@ class Sonarr:
         return data
 
     def identify(self, library, path):
+        series, episodes = self.identify_many(library, path)
+        if len(episodes) != 1:
+            raise IdentityError("Keine eindeutige einzelne Sonarr-TVDB-Episoden-ID")
+        return series, episodes[0]
+
+    def identify_many(self, library, path):
         if not library.sonarr_path:
             raise IdentityError("Sonarr-Pfadpräfix der Mediathek fehlt")
         target = library.sonarr_path.replace("\\", "/").rstrip("/") + "/" + path.relative_to(library.path).as_posix()
@@ -56,9 +62,19 @@ class Sonarr:
         if len(files) != 1:
             raise IdentityError("Datei nicht eindeutig in Sonarr gefunden")
         episodes = [item for item in self.get(f"episode?seriesId={sid}") if item.get("episodeFileId") == files[0]["id"]]
-        if len(episodes) != 1 or not episodes[0].get("tvdbId") or not series.get("tvdbId"):
-            raise IdentityError("Keine eindeutige Sonarr-TVDB-Episoden-ID (Mehrfachepisoden nicht unterstützt)")
-        return str(series["tvdbId"]), str(episodes[0]["tvdbId"])
+        if not episodes or not series.get("tvdbId") or any(not item.get("tvdbId") for item in episodes):
+            raise IdentityError("Keine eindeutigen Sonarr-TVDB-Episoden-IDs")
+        if len(episodes) > 1:
+            locations = [(item.get("seasonNumber"), item.get("episodeNumber")) for item in episodes]
+            if any(type(s) is not int or type(e) is not int for s, e in locations) or len(set(locations)) != len(locations):
+                raise IdentityError("Sonarr-Episodenreihenfolge nicht eindeutig")
+            if len({s for s, e in locations}) != 1:
+                raise IdentityError("Staffelübergreifende Sonarr-Dateizuordnung nicht unterstützt")
+            episodes = sorted(episodes, key=lambda item: item["episodeNumber"])
+        ids = [str(item["tvdbId"]) for item in episodes]
+        if len(set(ids)) != len(ids):
+            raise IdentityError("Doppelte Sonarr-TVDB-Episoden-ID")
+        return str(series["tvdbId"]), ids
 
 
 class TVDB:

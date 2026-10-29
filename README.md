@@ -135,6 +135,38 @@ für jeden Auftrag. Bereits unverändert vorhandene fremde NFOs lösen keinen Re
 Häufig verwendete TMDB-Antworten werden zusätzlich zum SQLite-Cache für maximal
 60 Sekunden im Arbeitsspeicher gehalten (höchstens 256 Antworten).
 
+## Mehrfachepisoden
+
+Dateien wie `Serie - S08E01-E02.mkv`, `S08E01-E03` (Bereich inklusive
+Endfolge) und `S08E01E03` (explizite Liste) werden unterstützt. Die Episoden
+müssen aufsteigend innerhalb derselben Staffel liegen; pro Datei maximal
+100 Episoden. Einzelne Specials wie `S00E25` funktionieren weiterhin.
+
+Bei Quelle TheTVDB ermittelt Sonarr alle zur konkreten Datei gehörenden Episoden.
+Ihre eindeutigen TVDB-IDs werden in Sonarr-Episodenreihenfolge verarbeitet; die
+Anzahl muss zur Dateibenennung passen. Sonarr-Nummern dürfen von der lokalen
+Nummerierung abweichen. Titel und Handlung werden für jede Episode separat aus
+den konfigurierten TVDB-Sprachen abgerufen. Fehlende IDs, widersprüchliche NFOs
+oder fehlende erforderliche Übersetzungen verhindern eine unvollständige Ausgabe.
+
+Bei TMDB gelten dieselben Sicherheitsregeln wie für Einzelepisoden: externe IDs
+pro Episode aus vorhandener NFO oder bewusst aktiviertes `season_numbering`.
+Es wird keine Übereinstimmung zwischen Sonarr-/TVDB- und TMDB-Nummerierung geraten.
+
+Die gleichnamige `.nfo` enthält mehrere aufeinanderfolgende
+`<episodedetails>`-Blöcke mit jeweils eigener Nummer, ID, Titel und Handlung.
+Das entspricht dem Plex-NFO-Mehrfachepisodenformat; keine zusammengefasste
+Beschreibung und kein Umbenennen oder Aufteilen des Videos. Die WebUI zeigt die
+Felder aller enthaltenen Episoden. Vorhandene fremde NFOs bleiben gemäß den
+bisherigen Schreib-/Backup-Regeln geschützt.
+
+Nach einem Update können zuvor wegen Mehrfachepisoden fehlgeschlagene Aufträge
+über die vorhandene WebUI-Aktion zum Wiederholen fehlgeschlagener Aufträge erneut
+angestoßen werden. Ein automatischer Scan allein setzt fehlgeschlagene Aufträge
+mit unveränderter Signatur nicht zurück.
+
+Formatreferenz: https://support.plex.tv/articles/using-nfo-metadata-files-with-plex/
+
 ## Weboberfläche
 
 ### Deutsche Serienmetadaten über Sonarr + TheTVDB
@@ -283,8 +315,8 @@ gespeichert. Für die wiederholte Verarbeitung `serve` starten.
 - Plex Media Server >= 1.43.1 und NFO-Agenten „Plex NFO Movie“ bzw. „Plex NFO
   Series“ aktivieren. Bestehende gesperrte Felder können ein Refresh-Ergebnis
   beeinflussen. Vor Umstellung an einer kleinen Testmediathek prüfen.
-- Ein Film pro Ordner, eine Datei pro Episode. Mehrteilige Filme,
-  Multi-Episoden-Dateien, Anime-Absolutnummerierung und mehrere Filmversionen im
+- Ein Film pro Ordner. Mehrteilige Filme,
+  Anime-Absolutnummerierung und mehrere Filmversionen im
   selben Ordner werden nicht automatisch verarbeitet.
 - Serien-Episoden werden vorzugsweise über TVDB-/IMDb-Episoden-IDs aus vorhandenen
   NFOs zugeordnet. Ohne solche IDs ist `season_numbering = true` erforderlich.

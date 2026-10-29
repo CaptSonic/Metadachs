@@ -45,14 +45,20 @@ def inspect_nfo(path, root):
         xml = read_nfo(path)
         if xml is None:
             return result
+        records = list(xml) if xml.tag == "episodes" else [xml]
         fields = {}
-        for child in xml:
-            values = [text.strip() for text in child.itertext() if text.strip()]
-            if values:
-                fields.setdefault(child.tag, []).append(" · ".join(values)[:2000])
-        result.update(status="valid", title=xml.findtext("title") or "", fields=fields,
+        for record in records:
+            for child in record:
+                values = [text.strip() for text in child.itertext() if text.strip()]
+                if values:
+                    fields.setdefault(child.tag, []).append(" · ".join(values)[:2000])
+        record_ids = [identities([], record) for record in records]
+        result.update(status="valid", title=" / ".join(record.findtext("title") or "" for record in records), fields=fields,
                       groups=[name for name, tags in GROUPS.items() if any(tag in fields for tag in tags)],
-                      ids=identities([], xml))
+                      ids=record_ids[0] if len(records) == 1 else {},
+                      episodes=[{"season": record.findtext("season"), "episode": record.findtext("episode"),
+                                 "title": record.findtext("title") or "", "ids": ids}
+                                for record, ids in zip(records, record_ids)] if xml.tag == "episodes" else [])
     except (OSError, ValueError, UnicodeError) as exc:
         result.update(status="error", error=str(exc))
     return result

@@ -13,7 +13,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from .config import contained, path_suffix
-from .metadata import EXTRAS, VIDEO_EXTENSIONS, IdentityError, TMDB, identities, nfo_xml, read_nfo, sha, write_nfo
+from .metadata import EXTRAS, VIDEO_EXTENSIONS, IdentityError, TMDB, identities, nfo_xml, read_nfo, sha, write_nfo, episode_numbers, episode_nfos
 from .plex import Plex
 from .store import Store
 from .web import Web
@@ -169,32 +169,52 @@ class Service:
                 show = self.tmdb.details(f"tv/{identifier}")
             ep_output = path.with_suffix(".nfo")
             ep_existing = read_nfo(ep_output)
-            ep_ids = identities([], ep_existing)
-            match = re.search(r"(?i)S(\d{1,3})E(\d{1,4})(?!\d)", path.stem)
-            if not match or re.search(r"(?i)(?:E\d+|[- ]+\d+|[- ]+E\d+|[- ]+S\d+E\d+)", path.stem[match.end():].split(" - ")[0]):
-                raise IdentityError("Nicht unterstützte oder mehrteilige Episodenbenennung")
-            season, episode = map(int, match.groups())
-            if ep_existing is not None:
+            season, numbers = episode_numbers(path.stem)
+            records = list(ep_existing) if ep_existing is not None and ep_existing.tag == "episodes" else [ep_existing]
+            if records != [None] and len(records) != len(numbers):
+                raise IdentityError("Episodenanzahl in NFO und Dateiname widerspricht sich")
+            if records == [None]:
+                records *= len(numbers)
+            episode_ids = []
+            for episode, record in zip(numbers, records):
+                episode_ids.append(identities([], record))
+                if record is None:
+                    continue
                 for key, value in (("season", season), ("episode", episode)):
-                    existing_number = ep_existing.findtext(key)
+                    existing_number = record.findtext(key)
                     if existing_number is not None and existing_number != str(value):
                         raise IdentityError("Episodennummer in NFO und Dateiname widerspricht sich")
+            contents = []
             if lib.metadata_source == "tvdb":
-                series_id, episode_id = self.sonarr.identify(lib, path)
+                if len(numbers) == 1:
+                    series_id, single_id = self.sonarr.identify(lib, path)
+                    tvdb_ids = [single_id]
+                else:
+                    series_id, tvdb_ids = self.sonarr.identify_many(lib, path)
+                if len(tvdb_ids) != len(numbers):
+                    raise IdentityError("Episodenanzahl in Sonarr und Dateiname widerspricht sich")
                 if ids.get("tvdb") and ids["tvdb"] != series_id:
                     raise IdentityError("Sonarr-Serie widerspricht vorhandener TVDB-Serien-ID")
-                if ep_ids.get("tvdb") and ep_ids["tvdb"] != episode_id:
-                    raise IdentityError("Sonarr-Episode widerspricht vorhandener TVDB-Episoden-ID")
                 show_base, show = self.tvdb.details("series", series_id)
-                ep_base, data = self.tvdb.details("episodes", episode_id)
-                if str(show_base.get("id")) != series_id or str(ep_base.get("id")) != episode_id or str(ep_base.get("seriesId")) != series_id:
-                    raise IdentityError("TVDB-Episode gehört nicht eindeutig zur ermittelten Serie")
-                LOG.info("Sonarr-Dateizuordnung: TVDB-Serie %s, Episode %s; Texte direkt von TVDB", series_id, episode_id)
-                actions.extend(((output, nfo_xml(show, "tv", provider="tvdb", provider_id=series_id)),
-                                (ep_output, nfo_xml(data, "episode", season, episode, provider="tvdb", provider_id=episode_id))))
+                for episode, ep_ids, episode_id in zip(numbers, episode_ids, tvdb_ids):
+                    if ep_ids.get("tvdb") and ep_ids["tvdb"] != episode_id:
+                        raise IdentityError("Sonarr-Episode widerspricht vorhandener TVDB-Episoden-ID")
+                    ep_base, data = self.tvdb.details("episodes", episode_id)
+                    if str(show_base.get("id")) != series_id or str(ep_base.get("id")) != episode_id or str(ep_base.get("seriesId")) != series_id:
+                        raise IdentityError("TVDB-Episode gehört nicht eindeutig zur ermittelten Serie")
+                    LOG.info("Sonarr-Dateizuordnung: TVDB-Serie %s, Episode %s; Texte direkt von TVDB", series_id, episode_id)
+                    contents.append(nfo_xml(data, "episode", season, episode, provider="tvdb", provider_id=episode_id))
+                actions.append((output, nfo_xml(show, "tv", provider="tvdb", provider_id=series_id)))
             else:
-                data = self.tmdb.episode(identifier, ep_ids, season, episode, lib.season_numbering)
-                actions.extend(((output, nfo_xml(show, "tv")), (ep_output, nfo_xml(data, "episode", season, episode))))
+                resolved = set()
+                for episode, ep_ids in zip(numbers, episode_ids):
+                    data = self.tmdb.episode(identifier, ep_ids, season, episode, lib.season_numbering)
+                    if data.get("id") is None or str(data["id"]) in resolved:
+                        raise IdentityError("TMDB-Mehrfachepisoden-Zuordnung nicht eindeutig")
+                    resolved.add(str(data["id"]))
+                    contents.append(nfo_xml(data, "episode", season, episode))
+                actions.append((output, nfo_xml(show, "tv")))
+            actions.append((ep_output, episode_nfos(contents)))
         changed = False
         for output, content in actions:
             if not contained(output, lib.path):

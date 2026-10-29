@@ -302,13 +302,14 @@ class ServiceTests(Fixture):
         self.assertFalse((path.parent / "movie.nfo").exists())
         service.plex.refresh.assert_not_called()
 
-    def test_multiepisode_rejected(self):
+    def test_multiepisode_without_unambiguous_tmdb_ids_rejected(self):
         path = self.video("Serie {tmdb-123}/Season 01/Serie - S01E01E02.mkv")
         lib = dataclasses.replace(self.lib, kind="tv", season_numbering=True)
         service = self.service(libraries=(lib,))
         service.tmdb.resolve = Mock(return_value=123)
         service.tmdb.details = Mock(return_value={"id": 123, "name": "Serie"})
-        with self.assertRaises(IdentityError):
+        service.tmdb.episode = Mock(return_value={"id": 999, "name": "Nicht eindeutig"})
+        with self.assertRaisesRegex(IdentityError, "Mehrfachepisoden-Zuordnung"):
             service.generate(lib, path)
 
     def test_series_outputs_local_numbering_after_id_mapping(self):
