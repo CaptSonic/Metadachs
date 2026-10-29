@@ -216,9 +216,11 @@ class Service:
             lib = self.library(path)
             if lib.name != job["library"] or not self.eligible(path, lib):
                 raise IdentityError("Datei nicht mehr gültig")
-            if self.signature(path) != job["signature"]:
-                self.store.update(job, status="superseded")
-                LOG.info("Auftrag überholt: Datei wurde erneut geändert: %s", path)
+            signature = self.signature(path)
+            if signature != job["signature"]:
+                renewed = self.store.reschedule(job, signature, self.config.stable_seconds)
+                LOG.info("Auftragssignatur geändert (Datei oder Verarbeitungseinstellungen); %s: %s",
+                         "mit aktueller Signatur neu eingereiht" if renewed else "neuerer Auftrag bereits vorhanden", path)
                 return True
             if time.time() - path.stat().st_mtime < self.config.stable_seconds:
                 self.store.update(job, status="pending", due=time.time() + self.config.stable_seconds)

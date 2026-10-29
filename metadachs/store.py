@@ -24,6 +24,9 @@ class Store:
         """)
         if recover:
             self.db.execute("UPDATE jobs SET status='pending' WHERE status='running'")
+            # Older releases stranded signature mismatches until the next scan.
+            self.db.execute("""UPDATE jobs SET status='pending', phase='metadata',
+                attempts=0, due=0, error='' WHERE status='superseded'""")
         self.db.commit()
 
     def enqueue(self, library: str, path: str, signature: str, delay: int = 0):
@@ -53,6 +56,15 @@ class Store:
         with self.lock:
             row = self.db.execute("SELECT value FROM cache WHERE key=? AND expires>?", (key, time.time())).fetchone()
             return json.loads(row[0]) if row else None
+
+    def reschedule(self, job, signature, delay):
+        """Replace only the claimed revision; never overwrite a newer scan/webhook."""
+        with self.lock, self.db:
+            cursor = self.db.execute("""UPDATE jobs SET signature=?, phase='metadata',
+                status='pending', attempts=0, due=?, error=''
+                WHERE library=? AND path=? AND signature=? AND status='running'""",
+                (signature, time.time() + delay, job["library"], job["path"], job["signature"]))
+            return cursor.rowcount > 0
 
     def cache(self, key, value, ttl):
         with self.lock, self.db:
