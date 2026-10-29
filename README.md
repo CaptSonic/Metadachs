@@ -137,6 +137,53 @@ Häufig verwendete TMDB-Antworten werden zusätzlich zum SQLite-Cache für maxim
 
 ## Weboberfläche
 
+### Deutsche Serienmetadaten über Sonarr + TheTVDB
+
+In Einstellungen → Allgemein die Sonarr-Serveradresse (inklusive eventuellem
+URL-Präfix) eintragen. Unter Zugangsdaten den Sonarr API-Key, einen eigenen
+TheTVDB-v4-API-Key und gegebenenfalls Subscriber-PIN hinterlegen. Für die betreffende
+Serienmediathek die Quelle **TheTVDB + Sonarr-Dateizuordnung** auswählen und den
+Sonarr-Pfadpräfix passend konfigurieren. Speichern und Container neu starten.
+Filme verwenden weiterhin TMDB; TMDB-Serien bleiben unverändert unterstützt.
+Aktuell wird eine Sonarr-Instanz unterstützt.
+
+Sonarr wird anhand des tatsächlichen Dateipfads abgefragt, nicht anhand gleicher
+Staffelnummern in verschiedenen Datenbanken. Eine bestehende Episoden-NFO ist
+nicht nötig. Die TVDB-Episoden-ID wird gegen die Serie geprüft. Titel und Beschreibung
+kommen ausschließlich aus TVDB-Übersetzungen, nicht aus englischen Sonarr-Texten.
+`de-DE` entspricht TVDB `deu`. Die konfigurierte Ersatzsprache greift nur bei
+fehlenden Übersetzungsfeldern; für ausschließlich deutsche Texte Ersatzsprache
+leeren. Fehlt dann ein deutscher Titel, wird der Auftrag zur Prüfung angehalten.
+Genres und technische Basisangaben stammen aus dem TVDB-Basisdatensatz und sind
+nicht zwingend übersetzt. In dieser ersten TVDB-Anbindung werden noch keine
+Besetzungs-/Bilddaten aus TVDB übernommen. Der TVDB-Popularitätsscore wird nicht
+als Bewertung ausgegeben. Lokale Staffel-/Folgenummern und Videodateien bleiben
+unverändert. Vorhandene fremde NFOs bleiben gemäß Schreibregeln geschützt.
+
+Eigener TVDB-API-Zugang ist erforderlich, je nach Zugangsmodell mit Subscriber-PIN.
+Zugangsbedingungen: https://github.com/thetvdb/v4-api
+Sonarr-Datei-/Episodenlisten werden 60 Sekunden, TVDB-Antworten gemäß
+`cache_seconds` zwischengespeichert. Änderungen der Quellenzuordnung stoßen beim
+nächsten automatischen/CLI-Scan neue Aufträge an. Bei abgeschaltetem Polling einen
+expliziten Scan ausführen oder fehlgeschlagene Aufträge nach der Korrektur wiederholen.
+
+### Anmeldung optional abschalten (nur vertrauenswürdiges LAN)
+
+Unter Einstellungen → Allgemein **WebUI-Anmeldung erforderlich** deaktivieren,
+Warnung bestätigen, speichern und Container neu starten. Alternativ
+`ui_auth_enabled = false` unter `[settings]` oder
+`METADACHS_UI_AUTH_ENABLED=false` setzen. Standard ist `true`.
+
+**Ohne Anmeldung kann jeder mit Netzwerkzugriff den Bestand lesen, Einstellungen
+ändern und gespeicherte Zugangsdaten ersetzen.** Keine Portweiterleitung oder
+öffentliche Reverse-Proxy-Freigabe verwenden. Das LAN ist nicht automatisch
+vertrauenswürdig, insbesondere bei Gast-/IoT-Geräten. Tokens werden weiterhin
+nicht an den Browser zurückgegeben; JSON-/Origin-Schutz für Änderungen bleibt aktiv.
+Der Sonarr-Webhook benötigt unabhängig vom UI-Schalter weiterhin seinen Token;
+auch bei deaktivierter UI-Anmeldung muss ein mindestens 16 Zeichen langer
+Webhook-Token konfiguriert sein. Die Anmeldung lässt sich über dieselbe Option
+wieder aktivieren. Ein deutlicher Warnhinweis erscheint in WebUI und Konsolen-Log.
+
 Nach dem Neubau des Images ist die Oberfläche unter `http://UNRAID-IP:8080/`
 erreichbar (bei abweichendem Host-Port entsprechend anpassen). Anmeldung im
 Browser: Benutzer **metadachs**, Passwort = `METADACHS_WEBHOOK_TOKEN`.

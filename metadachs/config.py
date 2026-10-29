@@ -17,6 +17,7 @@ class Library:
     plex_path: str = ""
     sonarr_path: str = ""
     season_numbering: bool = False
+    metadata_source: str = "tmdb"
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,11 @@ class Config:
     port: int = 8080
     cache_seconds: int = 86400
     retry_seconds: int = 60
+    sonarr_url: str = ""
+    sonarr_api_key: str = ""
+    tvdb_api_key: str = ""
+    tvdb_pin: str = ""
+    ui_auth_enabled: bool = True
 
 
 def path_suffix(value: str, prefix: str) -> str | None:
@@ -76,11 +82,11 @@ def load(path: Path) -> Config:
 
     data = expand(tomllib.loads(path.read_text(encoding="utf-8")))
     settings = data.get("settings", {})
-    for key in ("tmdb_token", "plex_url", "plex_token", "webhook_token", "state"):
+    for key in ("tmdb_token", "plex_url", "plex_token", "webhook_token", "state", "sonarr_url", "sonarr_api_key", "tvdb_api_key", "tvdb_pin"):
         env = "METADACHS_" + key.upper()
         if env in os.environ:
             settings[key] = os.environ[env]
-    for key in ("dry_run", "replace_existing", "polling_enabled"):
+    for key in ("dry_run", "replace_existing", "polling_enabled", "ui_auth_enabled"):
         env = "METADACHS_" + key.upper()
         if env in os.environ:
             if os.environ[env].lower() not in ("true", "false"):
@@ -89,6 +95,8 @@ def load(path: Path) -> Config:
     libs = []
     for raw in data.get("libraries", []):
         item = Library(**{**raw, "path": Path(raw["path"])})
+        if item.metadata_source not in ("tmdb", "tvdb") or (item.kind == "movie" and item.metadata_source != "tmdb"):
+            raise ValueError("metadata_source muss tmdb oder bei Serien tvdb sein")
         if item.kind not in ("movie", "tv") or not item.name or not item.path.is_absolute():
             raise ValueError("Mediathek benötigt name, kind=movie/tv und absoluten path")
         if item.plex_section and not item.plex_section.isdigit():
@@ -108,7 +116,7 @@ def load(path: Path) -> Config:
     config = Config(libraries=tuple(libs), **settings)
     if not config.state.is_absolute() or any(contained(config.state, lib.path) for lib in libs):
         raise ValueError("state muss absolut und außerhalb der Medienpfade liegen")
-    for key in ("dry_run", "replace_existing", "polling_enabled"):
+    for key in ("dry_run", "replace_existing", "polling_enabled", "ui_auth_enabled"):
         if type(getattr(config, key)) is not bool:
             raise ValueError(f"{key} muss ein Boolean sein")
     for lib in libs:
@@ -119,8 +127,9 @@ def load(path: Path) -> Config:
             raise ValueError(f"{key} muss eine positive Ganzzahl sein")
     if config.port > 65535:
         raise ValueError("Ungültiger Port")
-    if config.plex_url:
-        url = urlparse(config.plex_url)
-        if url.scheme not in ("http", "https") or not url.hostname or url.username or url.query or url.fragment:
-            raise ValueError("Ungültige Plex-URL")
+    for address in (config.plex_url, config.sonarr_url):
+        if address:
+            url = urlparse(address)
+            if url.scheme not in ("http", "https") or not url.hostname or url.username or url.query or url.fragment:
+                raise ValueError("Ungültige Server-URL")
     return config

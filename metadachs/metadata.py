@@ -171,7 +171,7 @@ class TMDB:
         return data
 
 
-def nfo_xml(data, kind, season=None, episode=None):
+def nfo_xml(data, kind, season=None, episode=None, provider="tmdb", provider_id=None):
     root = ET.Element({"movie": "movie", "tv": "tvshow", "episode": "episodedetails"}[kind])
 
     def node(tag, value, parent=root, **attrs):
@@ -189,11 +189,13 @@ def nfo_xml(data, kind, season=None, episode=None):
     if kind == "episode":
         node("season", season)
         node("episode", episode)
-    if kind == "tv":
+    if kind == "tv" and (provider == "tmdb" or data.get("status")):
         node("status", "Ended" if data.get("status") in ("Ended", "Canceled") else "Continuing")
-    node("uniqueid", data.get("id"), type="tmdb", default="true")
+    node("uniqueid", provider_id if provider_id is not None else data.get("id"), type=provider, default="true")
     external = data.get("external_ids", {})
     for source in ("imdb", "tvdb"):
+        if source == provider:
+            continue
         node("uniqueid", external.get(source + "_id") or data.get(source + "_id"), type=source)
     for genre in data.get("genres", []):
         node("genre", genre.get("name"))

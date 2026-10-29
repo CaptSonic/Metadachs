@@ -17,6 +17,7 @@ from .metadata import EXTRAS, VIDEO_EXTENSIONS, IdentityError, TMDB, identities,
 from .plex import Plex
 from .store import Store
 from .web import Web
+from .providers import Sonarr, TVDB
 
 LOG = logging.getLogger("metadachs")
 
@@ -27,6 +28,8 @@ class Service:
         self.store = Store(config.state, recover=recover)
         self.tmdb = TMDB(config, self.store)
         self.plex = Plex(config)
+        self.sonarr = Sonarr(config)
+        self.tvdb = TVDB(config, self.store)
         self.stop = threading.Event()
         self.observed = {}
         self.scan_lock = threading.Lock()
@@ -44,7 +47,7 @@ class Service:
         stat = path.stat()
         policy = f"{self.config.dry_run}:{self.config.replace_existing}:{self.config.language}:{self.config.fallback_language}"
         lib = self.library(path)
-        policy += f":{lib.season_numbering}:{lib.plex_section}:{lib.plex_path}"
+        policy += f":{lib.season_numbering}:{lib.plex_section}:{lib.plex_path}:{lib.metadata_source}:{lib.sonarr_path}:{self.config.sonarr_url}"
         return sha(f"{stat.st_size}:{stat.st_mtime_ns}:{policy}".encode())
 
     def eligible(self, path, library):
@@ -161,8 +164,9 @@ class Service:
             output = home / "tvshow.nfo"
             existing = read_nfo(output)
             ids = identities([home.name], existing)
-            identifier = self.tmdb.resolve(ids, "tv")
-            show = self.tmdb.details(f"tv/{identifier}")
+            if lib.metadata_source == "tmdb":
+                identifier = self.tmdb.resolve(ids, "tv")
+                show = self.tmdb.details(f"tv/{identifier}")
             ep_output = path.with_suffix(".nfo")
             ep_existing = read_nfo(ep_output)
             ep_ids = identities([], ep_existing)
@@ -175,8 +179,22 @@ class Service:
                     existing_number = ep_existing.findtext(key)
                     if existing_number is not None and existing_number != str(value):
                         raise IdentityError("Episodennummer in NFO und Dateiname widerspricht sich")
-            data = self.tmdb.episode(identifier, ep_ids, season, episode, lib.season_numbering)
-            actions.extend(((output, nfo_xml(show, "tv")), (ep_output, nfo_xml(data, "episode", season, episode))))
+            if lib.metadata_source == "tvdb":
+                series_id, episode_id = self.sonarr.identify(lib, path)
+                if ids.get("tvdb") and ids["tvdb"] != series_id:
+                    raise IdentityError("Sonarr-Serie widerspricht vorhandener TVDB-Serien-ID")
+                if ep_ids.get("tvdb") and ep_ids["tvdb"] != episode_id:
+                    raise IdentityError("Sonarr-Episode widerspricht vorhandener TVDB-Episoden-ID")
+                show_base, show = self.tvdb.details("series", series_id)
+                ep_base, data = self.tvdb.details("episodes", episode_id)
+                if str(show_base.get("id")) != series_id or str(ep_base.get("id")) != episode_id or str(ep_base.get("seriesId")) != series_id:
+                    raise IdentityError("TVDB-Episode gehört nicht eindeutig zur ermittelten Serie")
+                LOG.info("Sonarr-Dateizuordnung: TVDB-Serie %s, Episode %s; Texte direkt von TVDB", series_id, episode_id)
+                actions.extend(((output, nfo_xml(show, "tv", provider="tvdb", provider_id=series_id)),
+                                (ep_output, nfo_xml(data, "episode", season, episode, provider="tvdb", provider_id=episode_id))))
+            else:
+                data = self.tmdb.episode(identifier, ep_ids, season, episode, lib.season_numbering)
+                actions.extend(((output, nfo_xml(show, "tv")), (ep_output, nfo_xml(data, "episode", season, episode))))
         changed = False
         for output, content in actions:
             if not contained(output, lib.path):
@@ -277,6 +295,8 @@ class Service:
                 self.send_body(status, body, "application/json; charset=utf-8")
 
             def authorized(self):
+                if self.path != "/webhooks/sonarr" and not service.config.ui_auth_enabled:
+                    return True
                 auth = self.headers.get("Authorization", "")
                 token = ""
                 if auth.startswith("Bearer "):
@@ -322,6 +342,7 @@ class Service:
                         self.reply(400, {"error": "Ungültige Seitenauswahl"})
                 elif route == "/api/status":
                     self.reply(200, {"dry_run": service.config.dry_run, "last_scan": service.last_scan,
+                                     "ui_auth_enabled": service.config.ui_auth_enabled,
                                      "polling_enabled": service.config.polling_enabled,
                                      "scan_errors": service.scan_errors, "restart_required": service.web.restart_required})
                 else:
@@ -374,8 +395,10 @@ class Service:
                  len(self.config.libraries), self.config.poll_seconds, self.config.stable_seconds)
         LOG.info("WebUI und Sonarr-Webhook lauschen auf Port %d; Auftragsverarbeitung aktiv; automatische Ordnerprüfung: %s",
                  self.config.port, "aktiv" if self.config.polling_enabled else "deaktiviert")
-        if not self.config.tmdb_token:
-            LOG.warning("TMDB-Token fehlt; Online-Metadaten können noch nicht abgerufen werden")
+        if not self.config.ui_auth_enabled:
+            LOG.warning("WebUI-Anmeldung deaktiviert: Jeder mit Netzwerkzugriff kann Einstellungen ändern! Keine öffentliche Freigabe verwenden. Webhook bleibt token-geschützt.")
+        if not self.config.tmdb_token and any(lib.metadata_source == "tmdb" for lib in self.config.libraries):
+            LOG.warning("TMDB-Token fehlt; TMDB-Mediatheken können noch nicht verarbeitet werden")
         server.daemon_threads = True
         threads = [threading.Thread(target=fn, daemon=True) for fn in (self.worker, self.scanner)]
         for thread in threads:

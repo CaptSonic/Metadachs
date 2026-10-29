@@ -13,12 +13,18 @@ stable_seconds = 30
 retry_seconds = 60
 cache_seconds = 86400
 port = 8080
+ui_auth_enabled = true
+# Sonarr identifies files; TVDB supplies translated metadata for TVDB libraries.
+sonarr_url = ""
+# Secrets can be set in WebUI or via METADACHS_SONARR_API_KEY,
+# METADACHS_TVDB_API_KEY, METADACHS_TVDB_PIN (optional subscriber PIN).
 # Secrets are read from METADACHS_TMDB_TOKEN / METADACHS_PLEX_TOKEN /
 # METADACHS_WEBHOOK_TOKEN. Never commit your actual configuration or secrets.
 
 [[libraries]]
 name = "Serien"
 kind = "tv"
+metadata_source = "tmdb" # Select "tvdb" in WebUI to use Sonarr + TVDB.
 path = "${SERIES_PATH}"
 sonarr_path = "${SONARR_SERIES_PATH}"
 plex_path = "${PLEX_SERIES_PATH}"

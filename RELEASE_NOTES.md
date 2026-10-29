@@ -1,3 +1,53 @@
+# Metadachs v0.1.3 – Sonarr + TheTVDB und optionale WebUI-Anmeldung
+
+## Neu seit v0.1.2
+
+- Einrichtung von Sonarr-Adresse/API-Key sowie TheTVDB-API-Key und optionalem
+  Subscriber-PIN über die WebUI. Zugangsdaten werden nicht an den Browser zurückgegeben.
+- Pro Serienmediathek wählbare Quelle: bisheriges TMDB oder TheTVDB mit exakter
+  Sonarr-Dateizuordnung. Filme verwenden weiterhin TMDB.
+- Sonarr liefert die Datei-/Episodenidentität, nicht die Texte. Deutsche Titel und
+  Beschreibungen stammen direkt aus TVDB-Übersetzungen. Für ausschließlich deutsche
+  Texte die Ersatzsprache leeren. Fehlende Titel und mehrdeutige Zuordnungen werden
+  zur Prüfung angehalten; keine geratenen Episoden oder stillen englischen Sonarr-Texte.
+- Vorhandene Episoden-NFOs sind für die Sonarr-Zuordnung nicht erforderlich.
+  Lokale Nummerierung und Videodateien bleiben unverändert.
+- Optional abschaltbare WebUI-Anmeldung mit Bestätigung, Status- und Log-Warnung.
+  Standard bleibt Anmeldung aktiv. Ohne Anmeldung kann jeder mit Netzwerkzugriff
+  Einstellungen und Zugangsdaten ersetzen: nur im vertrauenswürdigen LAN verwenden.
+  Der Sonarr-Webhook bleibt unabhängig davon token-geschützt.
+- Automatische Start-/Intervallscans optional abschaltbar; Webhooks, manuelle
+  Bestandsabfrage und expliziter CLI-Scan bleiben verfügbar.
+- Plex-Pfadindex mit 60-Sekunden-Cache und begrenzter TMDB-RAM-Cache.
+- Aussagekräftige TMDB-404-Diagnosen ohne automatische Wiederholungen bei
+  unpassender Identität/Nummerierung; Netzwerkfehler behalten ihre Wiederholungen.
+
+## Aktualisieren und einrichten
+
+1. Container auf `ghcr.io/captsonic/metadachs:0.1.3` oder `:latest` aktualisieren.
+2. In der WebUI Sonarr-/TVDB-Zugangsdaten, Quelle und Sonarr-Pfadpräfix der
+   Serienmediathek konfigurieren. Bestehende Konfigurationen bleiben bei TMDB.
+3. Speichern und Container neu starten; Umgebungsvariablen haben weiterhin Vorrang.
+4. Zunächst im Vorschaumodus an einem kleinen Bestand prüfen.
+
+Release-Assets: `metadachs-v0.1.3.zip`, `config.example.toml`, Unraid-Template
+`metadachs.xml` und `SHA256SUMS.txt`. Der Tag-Workflow veröffentlicht Images für
+`linux/amd64` und `linux/arm64` unter `:0.1.3` und `:latest`.
+
+## Validierung und Grenzen
+
+- 64 automatisierte Tests unter Windows und Linux-Docker erfolgreich;
+  JavaScript-Syntaxprüfung und Docker-Build erfolgreich.
+- Eigener TVDB-Zugang erforderlich; Subscriber-PIN abhängig vom Zugangsmodell.
+- Aktuell eine Sonarr-Instanz; Mehrfachepisoden-Dateien werden abgelehnt.
+- TVDB-Besetzung und -Bilder sind noch nicht angebunden. Genres/Basisangaben
+  sind nicht zwingend übersetzt; ein fehlender Beschreibungstext bleibt leer.
+- Noch keine Prüfung mit persönlichen Sonarr-/TVDB-/Plex-Zugängen oder auf Unraid.
+  Insbesondere die echte Wilsberg-Zuordnung ist noch nicht bestätigt.
+- Keine Open-Source-Lizenz festgelegt. Medien werden nicht umbenannt oder verändert.
+
+---
+
 # Metadachs v0.1.2 – Sichtbare Konsolenaktivität
 
 Erweiterte Statusmeldungen auf stdout, direkt im Unraid-Container-Log sichtbar.
