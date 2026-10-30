@@ -165,7 +165,7 @@ class Web:
 
     def _update_all_nfos(self):
         """Discover every configured library, independently of cached UI pages."""
-        LOG.info("Globale NFO-Aktualisierung gestartet: alle konfigurierten Mediatheken; nur fehlende IDs")
+        LOG.info("Globale NFO-Neuerstellung gestartet: alle konfigurierten Mediatheken; vollständiger Ersatz mit Sicherung")
         errors = []
 
         def paths():
@@ -211,7 +211,7 @@ class Web:
                 continue
             queued += int(accepted)
             skipped += int(not accepted)
-        LOG.info("NFO-Aktualisierung angefordert: %d Aufträge, %d übersprungen; nur fehlende IDs", queued, skipped)
+        LOG.info("NFO-Neuerstellung angefordert: %d Aufträge, %d übersprungen; vollständiger Ersatz mit Sicherung", queued, skipped)
         return {"queued": queued, "skipped": skipped, "dry_run": self.service.config.dry_run}
 
     def _queue_nfo_path(self, path):

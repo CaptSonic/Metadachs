@@ -98,7 +98,7 @@ class NFOUpdateTests(Fixture):
         self.assertEqual(service.store.report()[0]['operation'], 'nfo-update')
         service.process_one()
         self.assertEqual(service.store.report()[0]['status'], 'done')
-        self.assertEqual(read_nfo(output).findtext('title'), 'Eigener Titel')
+        self.assertEqual(read_nfo(output).findtext('title'), 'Online-Titel')
         self.assertEqual(service.web.update_nfos({'library': self.lib.name})['queued'], 1)
 
     def test_invalid_inventory_target_rejected(self):

@@ -1,6 +1,8 @@
 """Sonarr file identity and direct TVDB translations. Never use Sonarr prose."""
 
 import json
+import copy
+from collections import OrderedDict
 import re
 import time
 import urllib.error
@@ -30,6 +32,8 @@ class Sonarr:
     def __init__(self, config):
         self.config = config
         self.cache = {}
+        self.file_indexes = {}
+        self.episode_indexes = {}
 
     def get(self, endpoint):
         if not self.config.sonarr_url or not self.config.sonarr_api_key:
@@ -59,10 +63,31 @@ class Sonarr:
             raise IdentityError("Datei gehört nicht eindeutig zu einer Sonarr-Serie")
         series = candidates[0]
         sid = int(series["id"])
-        files = [item for item in self.get(f"episodefile?seriesId={sid}") if path_suffix(item.get("path", ""), target) == ""]
+        file_list = self.get(f"episodefile?seriesId={sid}")
+        key = target.casefold() if re.match(r"^[A-Za-z]:", target) else target
+        cached = self.file_indexes.get(sid)
+        if cached is None or cached[0] is not file_list:
+            index = {}
+            for item in file_list:
+                name = item.get("path", "").replace("\\", "/")
+                name = name.casefold() if re.match(r"^[A-Za-z]:", name) else name
+                index.setdefault(name, []).append(item)
+            if len(self.file_indexes) >= 64:
+                self.file_indexes.clear()
+            self.file_indexes[sid] = (file_list, index)
+        files = self.file_indexes[sid][1].get(key, [])
         if len(files) != 1:
             raise IdentityError("Datei nicht eindeutig in Sonarr gefunden")
-        episodes = [item for item in self.get(f"episode?seriesId={sid}") if item.get("episodeFileId") == files[0]["id"]]
+        episode_list = self.get(f"episode?seriesId={sid}")
+        cached = self.episode_indexes.get(sid)
+        if cached is None or cached[0] is not episode_list:
+            index = {}
+            for item in episode_list:
+                index.setdefault(item.get("episodeFileId"), []).append(item)
+            if len(self.episode_indexes) >= 64:
+                self.episode_indexes.clear()
+            self.episode_indexes[sid] = (episode_list, index)
+        episodes = self.episode_indexes[sid][1].get(files[0]["id"], [])
         if not episodes or not series.get("tvdbId") or any(not item.get("tvdbId") for item in episodes):
             raise IdentityError("Keine eindeutigen Sonarr-TVDB-Episoden-IDs")
         if len(episodes) > 1:
@@ -83,13 +108,19 @@ class TVDB:
         self.config, self.store = config, store
         self.token = ""
         self.expires = 0
+        self.memory = OrderedDict()
 
     def get(self, endpoint):
         if not self.config.tvdb_api_key:
             raise IdentityError("TVDB-API-Key in der WebUI hinterlegen")
         key = "tvdb:" + endpoint
+        entry = self.memory.get(key)
+        if entry and time.monotonic() < entry[0]:
+            self.memory.move_to_end(key)
+            return copy.deepcopy(entry[1])
         cached = self.store.get_cache(key)
         if cached is not None:
+            self.remember(key, cached)
             return cached
         if time.monotonic() >= self.expires:
             payload = {"apikey": self.config.tvdb_api_key}
@@ -107,7 +138,14 @@ class TVDB:
         if not isinstance(data, dict):
             raise IdentityError("TVDB lieferte keinen gültigen Datensatz")
         self.store.cache(key, data, self.config.cache_seconds)
+        self.remember(key, data)
         return data
+
+    def remember(self, key, data):
+        self.memory[key] = (time.monotonic() + min(60, self.config.cache_seconds), copy.deepcopy(data))
+        self.memory.move_to_end(key)
+        while len(self.memory) > 512:
+            self.memory.popitem(last=False)
 
     @staticmethod
     def external_ids(base):

@@ -141,7 +141,7 @@ Häufig verwendete TMDB-Antworten werden zusätzlich zum SQLite-Cache für maxim
 
 In der WebUI unter **Bestand → Alle NFOs aktualisieren (alle Mediatheken)**
 werden alle konfigurierten Medienpfade im Hintergrund frisch durchsucht und
-vorhandene NFOs zur ID-Ergänzung eingereiht. Keine Vorauswahl und kein vorheriger
+vorhandene NFOs zur vollständigen Neuerstellung eingereiht. Keine Vorauswahl und kein vorheriger
 Bestandsabgleich erforderlich; Suche, Mediatheksfilter und Seitenanzeige werden
 ignoriert. Auch bei deaktiviertem Polling nutzbar. Die Erfassungszusammenfassung
 steht im Log; Aufträge werden anschließend über die persistente Warteschlange
@@ -150,32 +150,42 @@ trotzdem verarbeitet. Verwaiste NFOs ohne zugehörige unterstützte Videodatei s
 Extras werden nicht bearbeitet. Keine automatische globale Aktualisierung bei Start.
 
 Für eine gezielte Aktualisierung zuerst **Bestand neu prüfen** ausführen. Danach
-**NFO aktualisieren (fehlende IDs)** an Film/Serie oder einer einzelnen Datei
+**NFO vollständig neu schreiben** an Film/Serie oder einer einzelnen Datei
 verwenden. Nach Auswahl einer Mediathek ist auch eine Aktualisierung der gesamten
 Mediathek möglich (unabhängig von Suchtext und Seitenanzeige). Die Aktion reiht
 explizite Aktualisierungsaufträge ein, auch für bereits abgeschlossene Dateien.
 Wartende/laufende Aufträge und Dateien ohne vorhandene NFO werden übersprungen.
 Fortschritt und Fehler stehen unter **Aufträge**; nach Abschluss Bestand neu prüfen.
 
-Die Funktion ergänzt ausschließlich fehlende TVDB-/TMDB-/IMDb-`uniqueid`-Felder,
-sofern die konfigurierte Metadatenquelle diese eindeutig liefert. Vorhandene IDs
-werden nicht geändert; Widersprüche halten den Auftrag an. Titel, Handlung,
-Nummerierung und sonstige XML-Felder bleiben erhalten, einschließlich fremder NFOs.
-Die XML-Formatierung kann sich ändern. Fehlende NFOs werden hier nicht erstellt.
-Der bestehende **Vorschaumodus** verhindert Schreibzugriffe; im Schreibmodus wird
-vor jeder Änderung eine `.bak`-Sicherung erstellt. **Fremde NFOs ersetzen** muss
-für diese ausdrücklich angeforderte ID-Ergänzung nicht aktiviert werden. Fremde
-NFOs werden dadurch nicht als vollständig von Metadachs verwaltet übernommen.
-Mehrfachepisoden werden pro Episodenblock ergänzt. Ein konfigurierter Plex-Refresh
-läuft über die normale Auftragsverarbeitung; ein Container-Neustart ist für das
-Anstoßen der Aktualisierung nicht erforderlich.
+Die Aktion erzeugt NFOs **vollständig neu** aus der konfigurierten Quelle.
+Eigene Texte, zusätzliche Felder und alte NFO-IDs werden nicht übernommen.
+Sonarr bestimmt bei TVDB die Dateizuordnung; Ordner-IDs und aktuelle Providerdaten
+werden weiterhin geprüft. Lokale Nummern stammen aus dem Dateinamen. Bei TMDB
+sind explizite Ordner-/Datei-IDs und für Episoden bewusst aktiviertes
+`season_numbering` nötig, wenn keine unabhängige Zuordnung verfügbar ist.
+Bei erfassten Serien werden Serien- und Episoden-NFO neu erzeugt; dabei können
+fehlende Begleit-NFOs entstehen. Unveränderter generierter Inhalt wird nicht erneut
+geschrieben, um unnötige Backups und Medienzugriffe zu vermeiden.
+Der **Vorschaumodus** verhindert Schreibzugriffe; im Schreibmodus wird vor jeder
+Änderung eine `.bak`-Sicherung erstellt. **Fremde NFOs ersetzen** muss für die
+ausdrücklich angeforderte Neuerstellung nicht aktiviert werden. Neu geschriebene
+NFOs werden von Metadachs verwaltet. Bei normalen automatischen Aufträgen bleibt
+der Schutz fremder NFOs bestehen, solange `replace_existing=false` gilt.
+Ein konfigurierter Plex-Refresh läuft über die normale Auftragsverarbeitung.
+Für das Anstoßen ist kein Container-Neustart erforderlich.
+
+Zur Beschleunigung werden Sonarr-Dateien und -Episoden je Serie indexiert und
+TVDB-Antworten zusätzlich bis zu 60 Sekunden im begrenzten RAM-Cache gehalten
+(maximal 512 Einträge). Die bestehende persistente API-Cache-Dauer gilt weiterhin;
+„neu schreiben“ bedeutet keine erzwungene Umgehung aller Provider-Caches.
 
 Bei TVDB als Quelle werden explizite TMDB-/IMDb-Verknüpfungen aus den TVDB-
 `remoteIds` zusätzlich als `<uniqueid type="tmdb">` bzw. `type="imdb"` geschrieben.
 Das gilt getrennt für Serie und jede Episode, auch bei Mehrfachepisoden. TVDB bleibt
 die primäre ID und Textquelle; ein zusätzlicher TMDB-Token ist hierfür nicht nötig.
-Vorhandene TMDB-/IMDb-IDs aus NFOs bleiben erhalten; widersprüchliche Verknüpfungen
-halten den Auftrag zur Prüfung an. Fehlt die externe Verknüpfung, wird keine ID
+Bei normaler Verarbeitung bleiben vorhandene TMDB-/IMDb-IDs erhalten; bei expliziter
+Neuerstellung kommen sie ausschließlich aus den aktuellen Quellen/Ordnerangaben.
+Fehlt die externe Verknüpfung, wird keine ID
 geraten. Bereits abgeschlossene Aufträge werden dadurch nicht automatisch erneut
 verarbeitet; bestehende fremde NFOs bleiben gemäß Schreibschutzregeln geschützt.
 

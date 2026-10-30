@@ -1,6 +1,7 @@
 """Polling scanner, durable job execution and authenticated Sonarr HTTP ingress."""
 
 import base64
+import dataclasses
 import hmac
 import json
 import logging
@@ -160,7 +161,8 @@ class Service:
         LOG.info("Sonarr %s: %s, %d Videos geprüft, %d Aufträge aufgenommen", event, lib.name, count, queued)
         return {"accepted": True, "files": count}
 
-    def generate(self, lib, path, ids_only=False):
+    def generate(self, lib, path, ids_only=False, rewrite=False):
+        rewrite = rewrite or self.config.replace_existing
         relative = path.relative_to(lib.path)
         if len(relative.parts) < 2:
             raise IdentityError("Ein eigener Film-/Serienordner ist erforderlich")
@@ -172,20 +174,20 @@ class Service:
             if len(videos) != 1 or path.parent != home:
                 raise IdentityError("Mehrere Filmdateien/Unterordner benötigen manuelle Klärung")
             output = home / "movie.nfo"
-            existing = read_nfo(output)
+            existing = read_nfo(output) if not rewrite else None
             ids = identities([home.name, path.name], existing)
             identifier = self.tmdb.resolve(ids, "movie")
             data = self.tmdb.details(f"movie/{identifier}")
             actions.append((output, nfo_xml(data, "movie")))
         else:
             output = home / "tvshow.nfo"
-            existing = read_nfo(output)
+            existing = read_nfo(output) if not rewrite else None
             ids = identities([home.name], existing)
             if lib.metadata_source == "tmdb":
                 identifier = self.tmdb.resolve(ids, "tv")
                 show = self.tmdb.details(f"tv/{identifier}")
             ep_output = path.with_suffix(".nfo")
-            ep_existing = read_nfo(ep_output)
+            ep_existing = read_nfo(ep_output) if not rewrite else None
             season, numbers = episode_numbers(path.stem)
             records = list(ep_existing) if ep_existing is not None and ep_existing.tag == "episodes" else [ep_existing]
             if records != [None] and len(records) != len(numbers):
@@ -235,6 +237,8 @@ class Service:
                 actions.append((output, nfo_xml(show, "tv")))
             actions.append((ep_output, episode_nfos(contents)))
         expected_digests = {}
+        if ids_only or rewrite:
+            expected_digests = {output: sha(output.read_bytes()) for output, content in actions if output.exists()}
         if ids_only:
             # Validate all existing targets before writing any of them.
             expected_digests = {output: sha(output.read_bytes()) for output, content in actions if output.exists()}
@@ -244,7 +248,8 @@ class Service:
         for output, content in actions:
             if not contained(output, lib.path):
                 raise IdentityError("Ausgabepfad außerhalb der Mediathek")
-            result = write_nfo(output, content, self.config, self.store, ids_only=ids_only,
+            write_config = dataclasses.replace(self.config, replace_existing=True) if rewrite else self.config
+            result = write_nfo(output, content, write_config, self.store, ids_only=ids_only,
                                expected_digest=expected_digests.get(output))
             description = {"written": "geschrieben", "would-write": "würde geschrieben (Vorschau)",
                            "preserved": "vorhandene fremde NFO bleibt erhalten", "unchanged": "unverändert"}[result]
@@ -274,7 +279,7 @@ class Service:
                 return True
             if job["phase"] == "metadata":
                 if job.get("operation") == "nfo-update":
-                    changed = self.generate(lib, path, ids_only=True)
+                    changed = self.generate(lib, path, rewrite=True)
                 else:
                     changed = self.generate(lib, path)
                 # Also resume refresh after a crash between a successful write and
