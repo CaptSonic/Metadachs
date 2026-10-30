@@ -405,6 +405,14 @@ class HttpIntegrationTests(Fixture):
                 urllib.request.urlopen(base + "/api/config", timeout=3)
             self.assertEqual(error.exception.code, 401)
             error.exception.close()
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(base + "/api/logs", timeout=3)
+            self.assertEqual(error.exception.code, 401)
+            error.exception.close()
+            with urllib.request.urlopen(urllib.request.Request(base + "/api/logs", headers=headers), timeout=3) as response:
+                logs = json.load(response)
+                self.assertGreater(len(logs["entries"]), 0)
+                self.assertNotIn("integration-test-secret", json.dumps(logs))
             for route in ("/api/inventory/refresh", "/api/jobs/retry"):
                 action = urllib.request.Request(base + route, data=b'{}', headers={
                     **headers, "Content-Type": "application/json", "X-Metadachs-UI": "1"})

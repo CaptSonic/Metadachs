@@ -13,18 +13,35 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from .config import contained, path_suffix
-from .metadata import EXTRAS, VIDEO_EXTENSIONS, IdentityError, TMDB, identities, nfo_xml, read_nfo, sha, write_nfo, episode_numbers, episode_nfos
+from .metadata import EXTRAS, VIDEO_EXTENSIONS, IdentityError, TMDB, identities, nfo_xml, read_nfo, sha, write_nfo, episode_numbers, episode_nfos, merge_nfo_ids
 from .plex import Plex
 from .store import Store
 from .web import Web
 from .providers import Sonarr, TVDB
+from .logs import WebLog
 
 LOG = logging.getLogger("metadachs")
+
+
+def preserve_external_ids(data, existing_ids):
+    """Retain explicit NFO links and reject changes in provider identity."""
+    external = dict(data.get("external_ids") or {})
+    for source in ("tmdb", "imdb"):
+        key = source + "_id"
+        old = existing_ids.get(source)
+        current = external.get(key)
+        if old and current and str(old) != str(current):
+            raise IdentityError(f"Externe {source}-ID widerspricht vorhandener NFO/Pfad-ID")
+        if old:
+            external[key] = old
+    return {**data, "external_ids": external}
 
 
 class Service:
     def __init__(self, config, recover=True, config_path=None):
         self.config = config
+        self.logs = WebLog(getattr(config, key) for key in
+                           ('tmdb_token', 'plex_token', 'webhook_token', 'sonarr_api_key', 'tvdb_api_key', 'tvdb_pin'))
         self.store = Store(config.state, recover=recover)
         self.tmdb = TMDB(config, self.store)
         self.plex = Plex(config)
@@ -143,7 +160,7 @@ class Service:
         LOG.info("Sonarr %s: %s, %d Videos geprüft, %d Aufträge aufgenommen", event, lib.name, count, queued)
         return {"accepted": True, "files": count}
 
-    def generate(self, lib, path):
+    def generate(self, lib, path, ids_only=False):
         relative = path.relative_to(lib.path)
         if len(relative.parts) < 2:
             raise IdentityError("Ein eigener Film-/Serienordner ist erforderlich")
@@ -196,10 +213,12 @@ class Service:
                 if ids.get("tvdb") and ids["tvdb"] != series_id:
                     raise IdentityError("Sonarr-Serie widerspricht vorhandener TVDB-Serien-ID")
                 show_base, show = self.tvdb.details("series", series_id)
+                show = preserve_external_ids(show, ids)
                 for episode, ep_ids, episode_id in zip(numbers, episode_ids, tvdb_ids):
                     if ep_ids.get("tvdb") and ep_ids["tvdb"] != episode_id:
                         raise IdentityError("Sonarr-Episode widerspricht vorhandener TVDB-Episoden-ID")
                     ep_base, data = self.tvdb.details("episodes", episode_id)
+                    data = preserve_external_ids(data, ep_ids)
                     if str(show_base.get("id")) != series_id or str(ep_base.get("id")) != episode_id or str(ep_base.get("seriesId")) != series_id:
                         raise IdentityError("TVDB-Episode gehört nicht eindeutig zur ermittelten Serie")
                     LOG.info("Sonarr-Dateizuordnung: TVDB-Serie %s, Episode %s; Texte direkt von TVDB", series_id, episode_id)
@@ -215,11 +234,18 @@ class Service:
                     contents.append(nfo_xml(data, "episode", season, episode))
                 actions.append((output, nfo_xml(show, "tv")))
             actions.append((ep_output, episode_nfos(contents)))
+        expected_digests = {}
+        if ids_only:
+            # Validate all existing targets before writing any of them.
+            expected_digests = {output: sha(output.read_bytes()) for output, content in actions if output.exists()}
+            actions = [(output, merge_nfo_ids(output, content)) for output, content in actions if output.exists()]
+            actions = [(output, content) for output, content in actions if content is not None]
         changed = False
         for output, content in actions:
             if not contained(output, lib.path):
                 raise IdentityError("Ausgabepfad außerhalb der Mediathek")
-            result = write_nfo(output, content, self.config, self.store)
+            result = write_nfo(output, content, self.config, self.store, ids_only=ids_only,
+                               expected_digest=expected_digests.get(output))
             description = {"written": "geschrieben", "would-write": "würde geschrieben (Vorschau)",
                            "preserved": "vorhandene fremde NFO bleibt erhalten", "unchanged": "unverändert"}[result]
             LOG.info("NFO %s: %s", description, output)
@@ -247,7 +273,10 @@ class Service:
                 LOG.info("Datei noch nicht ruhig; erneute Prüfung in %d s: %s", self.config.stable_seconds, path)
                 return True
             if job["phase"] == "metadata":
-                changed = self.generate(lib, path)
+                if job.get("operation") == "nfo-update":
+                    changed = self.generate(lib, path, ids_only=True)
+                else:
+                    changed = self.generate(lib, path)
                 # Also resume refresh after a crash between a successful write and
                 # phase persistence, if a generated NFO is still managed by us.
                 nfo = path.with_suffix(".nfo") if lib.kind == "tv" else path.parent / "movie.nfo"
@@ -362,6 +391,8 @@ class Service:
                         self.reply(200, service.web.inventory(query.get("q", [""])[0], query.get("library", [""])[0], offset, limit))
                     except ValueError:
                         self.reply(400, {"error": "Ungültige Seitenauswahl"})
+                elif route == "/api/logs":
+                    self.reply(200, service.logs.snapshot())
                 elif route == "/api/status":
                     self.reply(200, {"dry_run": service.config.dry_run, "last_scan": service.last_scan,
                                      "ui_auth_enabled": service.config.ui_auth_enabled,
@@ -374,7 +405,7 @@ class Service:
                 if not self.authorized():
                     self.reply(401, {"error": "Authentifizierung erforderlich"})
                     return
-                if self.path not in ("/webhooks/sonarr", "/api/config", "/api/inventory/refresh", "/api/jobs/retry"):
+                if self.path not in ("/webhooks/sonarr", "/api/config", "/api/inventory/refresh", "/api/jobs/retry", "/api/nfo/update"):
                     self.reply(404, {"error": "Unbekannter Endpunkt"})
                     return
                 try:
@@ -399,6 +430,8 @@ class Service:
                         result = service.web.save(payload)
                     elif self.path == "/api/inventory/refresh":
                         result = {"started": service.web.refresh()}
+                    elif self.path == "/api/nfo/update":
+                        result = service.web.update_nfos(payload)
                     elif self.path == "/api/jobs/retry":
                         service.store.retry()
                         result = {"accepted": True}
@@ -412,6 +445,7 @@ class Service:
                 LOG.debug("HTTP-Anfrage verarbeitet")
 
         server = ThreadingHTTPServer(("0.0.0.0", self.config.port), Handler)
+        LOG.addHandler(self.logs)
         LOG.info("Metadachs gestartet | Modus: %s | %d Mediatheken | Prüfintervall: %d s | Dateiruhe: %d s",
                  "VORSCHAU (keine NFO-Schreibzugriffe/Plex-Refreshs)" if self.config.dry_run else "SCHREIBMODUS",
                  len(self.config.libraries), self.config.poll_seconds, self.config.stable_seconds)
@@ -437,3 +471,5 @@ class Service:
                 self.web.thread.join()
             self.store.close()
             LOG.info("Metadachs beendet")
+            LOG.removeHandler(self.logs)
+            self.logs.close()

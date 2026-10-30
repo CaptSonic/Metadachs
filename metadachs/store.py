@@ -22,6 +22,8 @@ class Store:
             CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY, value TEXT, expires REAL);
             CREATE TABLE IF NOT EXISTS managed (path TEXT PRIMARY KEY, digest TEXT);
         """)
+        if "operation" not in {row[1] for row in self.db.execute("PRAGMA table_info(jobs)")}:
+            self.db.execute("ALTER TABLE jobs ADD COLUMN operation TEXT NOT NULL DEFAULT 'metadata'")
         if recover:
             self.db.execute("UPDATE jobs SET status='pending' WHERE status='running'")
             # Older releases stranded signature mismatches until the next scan.
@@ -33,7 +35,7 @@ class Store:
         with self.lock, self.db:
             cursor = self.db.execute("""INSERT INTO jobs(library,path,signature,due) VALUES(?,?,?,?)
                 ON CONFLICT(library,path) DO UPDATE SET signature=excluded.signature,
-                phase='metadata',status='pending',attempts=0,due=excluded.due,error=''
+                phase='metadata',operation='metadata',status='pending',attempts=0,due=excluded.due,error=''
                 WHERE jobs.signature != excluded.signature""", (library, path, signature, time.time() + delay))
             return cursor.rowcount > 0
 
@@ -44,6 +46,15 @@ class Store:
                 self.db.execute("UPDATE jobs SET status='running' WHERE library=? AND path=?", (row["library"], row["path"]))
                 return dict(row)
         return None
+
+    def enqueue_nfo_update(self, library, path, signature):
+        with self.lock, self.db:
+            cursor = self.db.execute("""INSERT INTO jobs(library,path,signature,operation)
+                VALUES(?,?,?,'nfo-update') ON CONFLICT(library,path) DO UPDATE SET
+                signature=excluded.signature, operation='nfo-update', phase='metadata',
+                status='pending',attempts=0,due=0,error=''
+                WHERE jobs.status NOT IN ('running','pending')""", (library, path, signature))
+            return cursor.rowcount > 0
 
     def update(self, job, **values):
         if not set(values) <= {"status", "phase", "attempts", "due", "error"}:
@@ -81,7 +92,7 @@ class Store:
 
     def report(self):
         with self.lock:
-            return [dict(row) for row in self.db.execute("SELECT library,path,phase,status,attempts,error FROM jobs ORDER BY library,path")]
+            return [dict(row) for row in self.db.execute("SELECT library,path,phase,status,attempts,error,operation FROM jobs ORDER BY library,path")]
 
     def retry(self):
         with self.lock, self.db:

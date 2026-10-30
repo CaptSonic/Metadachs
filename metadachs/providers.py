@@ -1,6 +1,7 @@
 """Sonarr file identity and direct TVDB translations. Never use Sonarr prose."""
 
 import json
+import re
 import time
 import urllib.error
 import urllib.request
@@ -109,6 +110,27 @@ class TVDB:
         return data
 
     @staticmethod
+    def external_ids(base):
+        """Use explicit provider links only, never infer IDs from numbering."""
+        result = {}
+        for item in base.get("remoteIds") or []:
+            source = re.sub(r"[^a-z0-9]", "", str(item.get("sourceName", "")).lower())
+            provider = {"imdb": "imdb", "themoviedb": "tmdb", "themoviedbcom": "tmdb",
+                        "themoviedborg": "tmdb", "tmdb": "tmdb"}.get(source)
+            if provider is None:
+                continue
+            value = str(item.get("id") or "").strip()
+            if value in ("", "0"):
+                continue
+            if not re.fullmatch(r"tt\d+" if provider == "imdb" else r"[1-9]\d*", value):
+                raise IdentityError(f"Ungültige externe TVDB-{provider}-ID")
+            key = provider + "_id"
+            if key in result and result[key] != value:
+                raise IdentityError(f"Widersprüchliche externe TVDB-{provider}-IDs")
+            result[key] = value
+        return result
+
+    @staticmethod
     def language(value):
         mapping = {"de": "deu", "en": "eng", "fr": "fra", "es": "spa", "it": "ita", "ja": "jpn"}
         code = value.split("-")[0].lower()
@@ -138,6 +160,7 @@ class TVDB:
         if not name:
             raise IdentityError("Kein TVDB-Titel in gewünschter Sprache/Ersatzsprache vorhanden")
         return base, {"name": name, "overview": overview, "runtime": base.get("runtime"),
+                      "external_ids": self.external_ids(base),
                       "status": (base.get("status") or {}).get("name", "") if isinstance(base.get("status"), dict) else base.get("status", ""),
                       "air_date": base.get("aired"), "first_air_date": base.get("firstAired"),
                       "genres": base.get("genres", [])}

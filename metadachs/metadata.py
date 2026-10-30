@@ -48,12 +48,13 @@ def read_nfo(path: Path):
     if match:
         text = text[:text.index("</" + match.group(1) + ">", match.start()) + len(match.group(1)) + 3]
     try:
-        return ET.fromstring(text)
+        return ET.fromstring(text, parser=ET.XMLParser(target=ET.TreeBuilder(insert_comments=True)))
     except ET.ParseError as exc:
         # Plex multi-episode NFO: sibling episodedetails, one XML declaration.
         fragment = re.sub(r"^\s*<\?xml[^?]*\?>", "", text, count=1)
         try:
-            root = ET.fromstring("<episodes>" + fragment + "</episodes>")
+            root = ET.fromstring("<episodes>" + fragment + "</episodes>",
+                                 parser=ET.XMLParser(target=ET.TreeBuilder(insert_comments=True)))
             if len(root) < 2 or any(child.tag != "episodedetails" for child in root):
                 raise ET.ParseError("Keine Mehrfachepisoden-NFO")
             return root
@@ -88,7 +89,8 @@ def episode_nfos(content):
     if len(content) == 1:
         return content[0]
     return b'<?xml version="1.0" encoding="utf-8"?>\n' + b"\n".join(
-        ET.tostring(ET.fromstring(item), encoding="utf-8") for item in content) + b"\n"
+        ET.tostring(ET.fromstring(item, parser=ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))),
+                    encoding="utf-8") for item in content) + b"\n"
 
 
 def identities(names, nfo=None):
@@ -231,7 +233,7 @@ def nfo_xml(data, kind, season=None, episode=None, provider="tmdb", provider_id=
         node("status", "Ended" if data.get("status") in ("Ended", "Canceled") else "Continuing")
     node("uniqueid", provider_id if provider_id is not None else data.get("id"), type=provider, default="true")
     external = data.get("external_ids", {})
-    for source in ("imdb", "tvdb"):
+    for source in ("tmdb", "imdb", "tvdb"):
         if source == provider:
             continue
         node("uniqueid", external.get(source + "_id") or data.get(source + "_id"), type=source)
@@ -281,14 +283,45 @@ def sha(content):
     return hashlib.sha256(content).hexdigest()
 
 
-def write_nfo(path, content, config, store):
+def merge_nfo_ids(path, proposed):
+    """Merge only missing uniqueids, validating all records before any writes."""
+    existing = read_nfo(path)
+    if existing is None:
+        raise IdentityError("NFO fehlt; Aktualisierung erstellt keine neuen NFOs")
+    fragment = re.sub(br"^\s*<\?xml[^?]*\?>", b"", proposed, count=1)
+    candidate = ET.fromstring(b"<records>" + fragment + b"</records>")
+    records = list(existing) if existing.tag == "episodes" else [existing]
+    if len(records) != len(candidate):
+        raise IdentityError("NFO-Aktualisierung: Episodenanzahl widerspricht sich")
+    changed = False
+    for current, incoming in zip(records, candidate):
+        if current.tag != incoming.tag:
+            raise IdentityError("NFO-Aktualisierung: NFO-Typ widerspricht sich")
+        for key in ("season", "episode"):
+            if current.findtext(key) != incoming.findtext(key):
+                raise IdentityError("NFO-Aktualisierung: lokale Nummerierung widerspricht sich")
+        old_ids, new_ids = identities([], current), identities([], incoming)
+        for source, value in new_ids.items():
+            if source in old_ids and old_ids[source] != value:
+                raise IdentityError(f"NFO-Aktualisierung: widersprüchliche {source}-ID")
+            if source not in old_ids:
+                ET.SubElement(current, "uniqueid", type=source).text = value
+                changed = True
+    if not changed:
+        return None
+    return episode_nfos([ET.tostring(record, encoding="utf-8", xml_declaration=True) for record in records])
+
+
+def write_nfo(path, content, config, store, ids_only=False, expected_digest=None):
     """Never take ownership of an unchanged foreign file; back up replacements."""
     if path.is_symlink():
         raise IdentityError("NFO-Symlinks werden nicht beschrieben")
     old = path.read_bytes() if path.exists() else None
+    if expected_digest is not None and (old is None or sha(old) != expected_digest):
+        raise IdentityError("NFO wurde während der Aktualisierung geändert; erneut anstoßen")
     if old == content:
         return "unchanged"
-    if old is not None and not config.replace_existing and store.digest(path) != sha(old):
+    if old is not None and not ids_only and not config.replace_existing and store.digest(path) != sha(old):
         return "preserved"
     if config.dry_run:
         return "would-write"
@@ -305,5 +338,6 @@ def write_nfo(path, content, config, store):
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
-    store.remember(path, sha(content))
+    if not ids_only or (old is not None and store.digest(path) == sha(old)):
+        store.remember(path, sha(content))
     return "written"

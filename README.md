@@ -137,6 +137,38 @@ Häufig verwendete TMDB-Antworten werden zusätzlich zum SQLite-Cache für maxim
 
 ## Mehrfachepisoden
 
+### Bestehende NFOs gezielt aktualisieren
+
+In der WebUI unter **Bestand** zuerst **Bestand neu prüfen** ausführen. Danach
+**NFO aktualisieren (fehlende IDs)** an Film/Serie oder einer einzelnen Datei
+verwenden. Nach Auswahl einer Mediathek ist auch eine Aktualisierung der gesamten
+Mediathek möglich (unabhängig von Suchtext und Seitenanzeige). Die Aktion reiht
+explizite Aktualisierungsaufträge ein, auch für bereits abgeschlossene Dateien.
+Wartende/laufende Aufträge und Dateien ohne vorhandene NFO werden übersprungen.
+Fortschritt und Fehler stehen unter **Aufträge**; nach Abschluss Bestand neu prüfen.
+
+Die Funktion ergänzt ausschließlich fehlende TVDB-/TMDB-/IMDb-`uniqueid`-Felder,
+sofern die konfigurierte Metadatenquelle diese eindeutig liefert. Vorhandene IDs
+werden nicht geändert; Widersprüche halten den Auftrag an. Titel, Handlung,
+Nummerierung und sonstige XML-Felder bleiben erhalten, einschließlich fremder NFOs.
+Die XML-Formatierung kann sich ändern. Fehlende NFOs werden hier nicht erstellt.
+Der bestehende **Vorschaumodus** verhindert Schreibzugriffe; im Schreibmodus wird
+vor jeder Änderung eine `.bak`-Sicherung erstellt. **Fremde NFOs ersetzen** muss
+für diese ausdrücklich angeforderte ID-Ergänzung nicht aktiviert werden. Fremde
+NFOs werden dadurch nicht als vollständig von Metadachs verwaltet übernommen.
+Mehrfachepisoden werden pro Episodenblock ergänzt. Ein konfigurierter Plex-Refresh
+läuft über die normale Auftragsverarbeitung; ein Container-Neustart ist für das
+Anstoßen der Aktualisierung nicht erforderlich.
+
+Bei TVDB als Quelle werden explizite TMDB-/IMDb-Verknüpfungen aus den TVDB-
+`remoteIds` zusätzlich als `<uniqueid type="tmdb">` bzw. `type="imdb"` geschrieben.
+Das gilt getrennt für Serie und jede Episode, auch bei Mehrfachepisoden. TVDB bleibt
+die primäre ID und Textquelle; ein zusätzlicher TMDB-Token ist hierfür nicht nötig.
+Vorhandene TMDB-/IMDb-IDs aus NFOs bleiben erhalten; widersprüchliche Verknüpfungen
+halten den Auftrag zur Prüfung an. Fehlt die externe Verknüpfung, wird keine ID
+geraten. Bereits abgeschlossene Aufträge werden dadurch nicht automatisch erneut
+verarbeitet; bestehende fremde NFOs bleiben gemäß Schreibschutzregeln geschützt.
+
 Dateien wie `Serie - S08E01-E02.mkv`, `S08E01-E03` (Bereich inklusive
 Endfolge) und `S08E01E03` (explizite Liste) werden unterstützt. Die Episoden
 müssen aufsteigend innerhalb derselben Staffel liegen; pro Datei maximal
@@ -168,6 +200,19 @@ mit unveränderter Signatur nicht zurück.
 Formatreferenz: https://support.plex.tv/articles/using-nfo-metadata-files-with-plex/
 
 ## Weboberfläche
+
+Im Tab **Log** stehen die letzten 1.000 Anwendungsmeldungen ab Serverstart bereit,
+einschließlich Aufträgen, NFO-Schreibzugriffen und Plex-Refreshs. Der geöffnete Tab
+aktualisiert alle drei Sekunden. **Pausieren**, manuelle Aktualisierung und ein
+Filter für Warnungen/Fehler erleichtern die Fehlersuche. Beim Hochscrollen bleibt
+die Leseposition erhalten; am unteren Ende folgt die Ansicht neuen Einträgen.
+Der Puffer liegt ausschließlich im RAM, ist begrenzt und wird bei Neustart geleert.
+Es ist kein Docker-Logarchiv; Konsolenausgabe bleibt unverändert aktiv.
+
+Der Log-Endpunkt verwendet denselben Zugriffsschutz wie die übrige WebUI.
+Konfigurierte Zugangsdaten und typische Token-/Authorization-Angaben werden für
+die Webanzeige maskiert. Logs enthalten weiterhin Medienpfade und Titel: Bei
+deaktivierter Anmeldung können alle mit Netzwerkzugriff diese Informationen lesen.
 
 ### Deutsche Serienmetadaten über Sonarr + TheTVDB
 

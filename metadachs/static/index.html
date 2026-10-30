@@ -3,14 +3,19 @@
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Metadachs</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
 <body>
 <header><div><h1>Metadachs</h1><span>NFOs · Mediatheken · Automatisierung</span></div><strong id="mode">Verbinde …</strong></header>
-<nav aria-label="Hauptnavigation"><button data-tab="inventory">Bestand</button><button data-tab="jobs">Aufträge</button><button data-tab="settings">Einstellungen</button></nav>
+<nav aria-label="Hauptnavigation"><button data-tab="inventory">Bestand</button><button data-tab="jobs">Aufträge</button><button data-tab="logs">Log</button><button data-tab="settings">Einstellungen</button></nav>
 <main><p id="notice" role="status" aria-live="polite"></p>
 <section id="inventory"><div class="toolbar"><h2>Erkannte Filme & Serien</h2><button id="refresh">Bestand neu prüfen</button></div>
 <p>Lokale Erkennung ist keine bestätigte Online-Zuordnung. Die Kategorien zeigen tatsächlich befüllte NFO-Felder, nicht nur verfügbare TMDB-Daten.</p>
 <div class="toolbar"><input id="search" type="search" placeholder="Titel oder Pfad suchen" aria-label="Bestand durchsuchen"><select id="library" aria-label="Mediathek"><option value="">Alle Mediatheken</option></select><span id="inventory-info"></span></div>
+<p>„NFO aktualisieren“ ergänzt nur fehlende IDs in bestehenden NFOs. Texte bleiben erhalten; Änderungen werden gesichert. Der Vorschaumodus gilt auch hier.</p>
+<button id="update-library" disabled>NFOs der ausgewählten Mediathek aktualisieren (fehlende IDs)</button>
 <div id="inventory-errors" role="status"></div><div id="items"></div>
 <div class="toolbar"><button id="previous">Zurück</button><span id="page"></span><button id="next">Weiter</button></div></section>
 <section id="jobs" hidden><div class="toolbar"><h2>Verarbeitungsaufträge</h2><button id="retry">Fehlgeschlagene erneut versuchen</button><button id="reload-jobs">Aktualisieren</button></div><div id="job-list"></div></section>
+<section id="logs" hidden><div class="toolbar"><h2>Live-Log</h2><button id="reload-logs">Aktualisieren</button><button id="pause-logs">Pausieren</button><label><span>Anzeige</span><select id="log-level"><option value="all">Alle Meldungen</option><option value="warning">Warnungen und Fehler</option></select></label></div>
+<p>Letzte 1.000 Anwendungsmeldungen seit Container-Start; Aktualisierung alle 3 Sekunden bei geöffnetem Tab. Kein dauerhaftes Logarchiv. Bei deaktivierter Anmeldung sind Logs einschließlich Medienpfaden für jeden mit Netzwerkzugriff sichtbar.</p>
+<p id="log-info" role="status"></p><pre id="log-output" aria-label="Anwendungslog" tabindex="0"></pre></section>
 <section id="settings" hidden><h2>Einstellungen</h2><p>Speichern erstellt eine Sicherung. Änderungen werden erst nach einem Container-Neustart aktiv. Docker-Mounts müssen weiterhin in Unraid eingerichtet werden. <code>${VARIABLE}</code>-Platzhalter dürfen erhalten bleiben.</p>
 <form id="config-form"><fieldset><legend>Allgemein</legend><div id="general" class="form-grid"></div></fieldset>
 <fieldset><legend>Zugangsdaten</legend><p>Leere Token-Felder behalten den gespeicherten Wert. Tokens werden niemals zurückgelesen. Umgebungsvariablen haben Vorrang.</p><div id="secrets" class="form-grid"></div><p id="overrides"></p></fieldset>

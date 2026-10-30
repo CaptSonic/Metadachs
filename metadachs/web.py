@@ -49,6 +49,8 @@ def inspect_nfo(path, root):
         fields = {}
         for record in records:
             for child in record:
+                if not isinstance(child.tag, str):
+                    continue
                 values = [text.strip() for text in child.itertext() if text.strip()]
                 if values:
                     fields.setdefault(child.tag, []).append(" · ".join(values)[:2000])
@@ -134,6 +136,41 @@ class Web:
                     "updated": self.updated, "scanning": self.scanning, "errors": self.errors,
                     "libraries": [lib.name for lib in self.service.config.libraries]}
 
+    def update_nfos(self, payload):
+        """Only accept known inventory targets; never arbitrary browser paths."""
+        target, library = payload.get("path", ""), payload.get("library", "")
+        if not isinstance(target, str) or not isinstance(library, str):
+            raise ValueError("Pfad und Mediathek müssen Text sein")
+        if not target and not library:
+            raise ValueError("Datei/Serie oder Mediathek auswählen")
+        with self.lock:
+            items = [item for item in self.items if not library or item["library"] == library]
+            files = [file["path"] for item in items for file in item["files"]
+                     if not target or target in (item["path"], file["path"])]
+        if not files:
+            raise ValueError("Kein passender Bestand; zuerst Bestand neu prüfen")
+        queued = skipped = 0
+        for name in dict.fromkeys(files):
+            path = Path(name)
+            lib = self.service.library(path)
+            if not self.service.eligible(path, lib):
+                skipped += 1
+                continue
+            if lib.kind == "tv":
+                nfo = path.with_suffix(".nfo")
+            else:
+                nfo = path.parent / "movie.nfo"
+            relative = path.relative_to(lib.path)
+            home = lib.path / relative.parts[0] if len(relative.parts) > 1 else path.parent
+            if not nfo.exists() and not (lib.kind == "tv" and (home / "tvshow.nfo").exists()):
+                skipped += 1
+                continue
+            accepted = self.service.store.enqueue_nfo_update(lib.name, str(path), self.service.signature(path))
+            queued += int(accepted)
+            skipped += int(not accepted)
+        LOG.info("NFO-Aktualisierung angefordert: %d Aufträge, %d übersprungen; nur fehlende IDs", queued, skipped)
+        return {"queued": queued, "skipped": skipped, "dry_run": self.service.config.dry_run}
+
     def settings(self):
         # Return effective settings, but never expose saved or environment secrets.
         config = self.service.config
@@ -196,6 +233,7 @@ class Web:
                     handle.flush()
                     os.fsync(handle.fileno())
                 validated = load(Path(name))
+                self.service.logs.add_secrets(getattr(validated, key) for key in SECRETS)
                 if len(validated.webhook_token) < 16:
                     raise ValueError("Webhook-Token muss mindestens 16 Zeichen lang sein")
                 # Preserve exact previous bytes and restrict token-containing backups.

@@ -39,6 +39,10 @@ class UIAuthTests(Fixture):
                 data = json.load(response)
                 self.assertFalse(data['settings']['ui_auth_enabled'])
                 self.assertNotIn('integration-test-secret', json.dumps(data))
+            with urllib.request.urlopen(base + '/api/logs', timeout=3) as response:
+                logs = json.load(response)
+                self.assertGreater(len(logs['entries']), 0)
+                self.assertNotIn('integration-test-secret', json.dumps(logs))
             request = urllib.request.Request(base + '/webhooks/sonarr', data=b'{"eventType":"Test"}')
             with self.assertRaises(urllib.error.HTTPError) as error:
                 urllib.request.urlopen(request, timeout=3)
@@ -52,6 +56,14 @@ class UIAuthTests(Fixture):
             with urllib.request.urlopen(request, timeout=3) as response:
                 self.assertTrue(json.load(response)['restart_required'])
             self.assertTrue(load(config).ui_auth_enabled)
+            for headers, status in (({'Content-Type': 'application/json'}, 403),
+                                    ({'Content-Type': 'application/json', 'X-Metadachs-UI': '1', 'Origin': 'http://foreign.invalid'}, 403),
+                                    ({'Content-Type': 'application/json', 'X-Metadachs-UI': '1'}, 400)):
+                request = urllib.request.Request(base + '/api/nfo/update', data=b'{"path":"/unknown"}', headers=headers)
+                with self.assertRaises(urllib.error.HTTPError) as error:
+                    urllib.request.urlopen(request, timeout=3)
+                self.assertEqual(error.exception.code, status)
+                error.exception.close()
         finally:
             process.terminate()
             process.wait(timeout=15)
