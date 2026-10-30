@@ -469,6 +469,8 @@ class Service:
                 thread.join()
             if self.web.thread:
                 self.web.thread.join()
+            if self.web.nfo_thread:
+                self.web.nfo_thread.join()
             self.store.close()
             LOG.info("Metadachs beendet")
             LOG.removeHandler(self.logs)

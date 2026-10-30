@@ -139,7 +139,17 @@ Häufig verwendete TMDB-Antworten werden zusätzlich zum SQLite-Cache für maxim
 
 ### Bestehende NFOs gezielt aktualisieren
 
-In der WebUI unter **Bestand** zuerst **Bestand neu prüfen** ausführen. Danach
+In der WebUI unter **Bestand → Alle NFOs aktualisieren (alle Mediatheken)**
+werden alle konfigurierten Medienpfade im Hintergrund frisch durchsucht und
+vorhandene NFOs zur ID-Ergänzung eingereiht. Keine Vorauswahl und kein vorheriger
+Bestandsabgleich erforderlich; Suche, Mediatheksfilter und Seitenanzeige werden
+ignoriert. Auch bei deaktiviertem Polling nutzbar. Die Erfassungszusammenfassung
+steht im Log; Aufträge werden anschließend über die persistente Warteschlange
+abgearbeitet. Fehlende Mounts/Lesefehler werden gemeldet; weitere Mediatheken werden
+trotzdem verarbeitet. Verwaiste NFOs ohne zugehörige unterstützte Videodatei sowie
+Extras werden nicht bearbeitet. Keine automatische globale Aktualisierung bei Start.
+
+Für eine gezielte Aktualisierung zuerst **Bestand neu prüfen** ausführen. Danach
 **NFO aktualisieren (fehlende IDs)** an Film/Serie oder einer einzelnen Datei
 verwenden. Nach Auswahl einer Mediathek ist auch eine Aktualisierung der gesamten
 Mediathek möglich (unabhängig von Suchtext und Seitenanzeige). Die Aktion reiht

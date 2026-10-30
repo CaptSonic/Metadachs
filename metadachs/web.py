@@ -11,7 +11,7 @@ import tomllib
 from pathlib import Path
 
 from .config import Library, contained, load
-from .metadata import EXTRAS, identities, read_nfo
+from .metadata import EXTRAS, VIDEO_EXTENSIONS, identities, read_nfo
 
 GROUPS = {
     "Titel": ("title", "originaltitle", "sorttitle"),
@@ -78,6 +78,8 @@ class Web:
         self.scanning = False
         self.restart_required = False
         self.thread = None
+        self.nfo_thread = None
+        self.nfo_updating = False
 
     def refresh(self):
         with self.lock:
@@ -138,6 +140,16 @@ class Web:
 
     def update_nfos(self, payload):
         """Only accept known inventory targets; never arbitrary browser paths."""
+        if "all" in payload:
+            if payload != {"all": True}:
+                raise ValueError("Globale Aktualisierung benötigt ausschließlich all=true")
+            with self.lock:
+                if self.nfo_updating:
+                    return {"started": False, "running": True, "dry_run": self.service.config.dry_run}
+                self.nfo_updating = True
+                self.nfo_thread = threading.Thread(target=self._update_all_nfos, daemon=True)
+                self.nfo_thread.start()
+            return {"started": True, "running": True, "dry_run": self.service.config.dry_run}
         target, library = payload.get("path", ""), payload.get("library", "")
         if not isinstance(target, str) or not isinstance(library, str):
             raise ValueError("Pfad und Mediathek müssen Text sein")
@@ -149,27 +161,72 @@ class Web:
                      if not target or target in (item["path"], file["path"])]
         if not files:
             raise ValueError("Kein passender Bestand; zuerst Bestand neu prüfen")
+        return self._queue_nfo_paths(files)
+
+    def _update_all_nfos(self):
+        """Discover every configured library, independently of cached UI pages."""
+        LOG.info("Globale NFO-Aktualisierung gestartet: alle konfigurierten Mediatheken; nur fehlende IDs")
+        errors = []
+
+        def paths():
+            for lib in self.service.config.libraries:
+                if self.service.stop.is_set():
+                    return
+                if not lib.path.is_dir():
+                    errors.append(f"Mount nicht verfügbar: {lib.name}")
+                    continue
+                def onerror(error):
+                    errors.append(f"Ordner nicht lesbar: {lib.name}: {error.filename}")
+                for folder, dirs, files in os.walk(lib.path, followlinks=False, onerror=onerror):
+                    dirs[:] = [name for name in dirs if name.lower() not in EXTRAS and not Path(folder, name).is_symlink()]
+                    for name in files:
+                        if self.service.stop.is_set():
+                            return
+                        path = Path(folder, name)
+                        if path.suffix.lower() in VIDEO_EXTENSIONS:
+                            yield str(path)
+        try:
+            result = self._queue_nfo_paths(paths(), errors)
+            for error in errors:
+                LOG.warning("Globale NFO-Aktualisierung: %s", error)
+            LOG.info("Globale NFO-Aktualisierung: Erfassung %s; %d Aufträge eingereiht, %d übersprungen, %d Fehler. Verarbeitung unter Aufträge/Log verfolgen.",
+                     "abgebrochen" if self.service.stop.is_set() else "abgeschlossen",
+                     result["queued"], result["skipped"], len(errors))
+        except Exception as exc:
+            LOG.warning("Globale NFO-Aktualisierung abgebrochen: %s", type(exc).__name__)
+        finally:
+            with self.lock:
+                self.nfo_updating = False
+
+    def _queue_nfo_paths(self, files, errors=None):
         queued = skipped = 0
-        for name in dict.fromkeys(files):
-            path = Path(name)
-            lib = self.service.library(path)
-            if not self.service.eligible(path, lib):
+        for name in files:
+            try:
+                accepted = self._queue_nfo_path(Path(name))
+            except (OSError, ValueError) as exc:
+                if errors is None:
+                    raise
+                errors.append(f"Datei nicht prüfbar: {name}: {type(exc).__name__}")
                 skipped += 1
                 continue
-            if lib.kind == "tv":
-                nfo = path.with_suffix(".nfo")
-            else:
-                nfo = path.parent / "movie.nfo"
-            relative = path.relative_to(lib.path)
-            home = lib.path / relative.parts[0] if len(relative.parts) > 1 else path.parent
-            if not nfo.exists() and not (lib.kind == "tv" and (home / "tvshow.nfo").exists()):
-                skipped += 1
-                continue
-            accepted = self.service.store.enqueue_nfo_update(lib.name, str(path), self.service.signature(path))
             queued += int(accepted)
             skipped += int(not accepted)
         LOG.info("NFO-Aktualisierung angefordert: %d Aufträge, %d übersprungen; nur fehlende IDs", queued, skipped)
         return {"queued": queued, "skipped": skipped, "dry_run": self.service.config.dry_run}
+
+    def _queue_nfo_path(self, path):
+        lib = self.service.library(path)
+        if not self.service.eligible(path, lib):
+            return False
+        if lib.kind == "tv":
+            nfo = path.with_suffix(".nfo")
+        else:
+            nfo = path.parent / "movie.nfo"
+        relative = path.relative_to(lib.path)
+        home = lib.path / relative.parts[0] if len(relative.parts) > 1 else path.parent
+        if not nfo.exists() and not (lib.kind == "tv" and (home / "tvshow.nfo").exists()):
+            return False
+        return self.service.store.enqueue_nfo_update(lib.name, str(path), self.service.signature(path))
 
     def settings(self):
         # Return effective settings, but never expose saved or environment secrets.
